@@ -65,6 +65,7 @@
                 <button class="filter-chip" data-category="Changed">Changed</button>
                 <button class="filter-chip" data-category="Deprecated">Deprecated</button>
                 <button class="filter-chip" data-category="Resolved">Resolved</button>
+                <button class="filter-chip" data-category="starred"><i class="fa-solid fa-star" style="color: #f59e0b; margin-right: 0.25rem;"></i> Bookmarks</button>
             </div>
             
             <div class="tag-filters" id="tag-filters" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; border-top: 1px solid var(--border-color); padding-top: 0.75rem; align-items: center;">
@@ -151,6 +152,10 @@
                         <div class="metric-item">
                             <span class="metric-val" id="stat-days-covered">-</span>
                             <span class="metric-lbl">Days Logged</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-val" id="stat-starred-count">0</span>
+                            <span class="metric-lbl">Bookmarked</span>
                         </div>
                     </div>
                 </div>

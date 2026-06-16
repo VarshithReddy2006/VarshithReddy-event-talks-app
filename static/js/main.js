@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
         searchQuery: '',        // Current search input value
         activeCategory: 'all',  // Current active category filter
         activeTag: 'all',       // Current active tag/domain filter
+        starredIds: new Set(),  // Set of starred update IDs
         lastFetched: '',
         activePlatform: 'twitter' // Current active composer platform: twitter, linkedin, slack
     };
@@ -34,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
         statTotalUpdates: document.getElementById('stat-total-updates'),
         statFeaturesCount: document.getElementById('stat-features-count'),
         statDaysCovered: document.getElementById('stat-days-covered'),
+        statStarredCount: document.getElementById('stat-starred-count'),
         
         // Floating action bar
         floatingActionBar: document.getElementById('floating-action-bar'),
@@ -194,6 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.statTotalUpdates.textContent = totalUpdates;
         elements.statFeaturesCount.textContent = featuresCount;
         elements.statDaysCovered.textContent = daysCovered;
+        elements.statStarredCount.textContent = appState.starredIds.size;
         
         // Render tag breakdown list in the sidebar
         elements.tagsBreakdownList.innerHTML = '';
@@ -284,7 +287,9 @@ document.addEventListener('DOMContentLoaded', () => {
         appState.releaseNotes.forEach(group => {
             const matchedUpdates = group.updates.filter(update => {
                 // Filter by category
-                const catMatches = (category === 'all' || update.category.toLowerCase() === category.toLowerCase());
+                const catMatches = (category === 'all' || 
+                                    (category === 'starred' && appState.starredIds.has(update.id)) ||
+                                    update.category.toLowerCase() === category.toLowerCase());
                 
                 // Filter by tag
                 const tagMatches = (tag === 'all' || (update.tags && update.tags.includes(tag)));
@@ -357,6 +362,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const badgeClass = `badge-${update.category.toLowerCase()}`;
                 const badgeText = update.category;
                 
+                const isStarred = appState.starredIds.has(update.id);
+                
                 cardDiv.innerHTML = `
                     <div class="card-header">
                         <div class="card-title-area" style="display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; width: 100%;">
@@ -371,8 +378,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                         </div>
                         <div class="card-actions">
-                            <button class="btn-icon-sm btn-tweet-sm btn-card-tweet" title="Tweet this update">
-                                <i class="fa-brands fa-x-twitter"></i>
+                            <button class="btn-icon-sm btn-star-card ${isStarred ? 'starred' : ''}" title="${isStarred ? 'Remove Bookmark' : 'Bookmark Update'}" style="${isStarred ? 'color: #f59e0b; background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3);' : ''}">
+                                <i class="${isStarred ? 'fa-solid' : 'fa-regular'} fa-star"></i>
+                            </button>
+                            <button class="btn-icon-sm btn-tweet-sm btn-card-tweet" title="Share this update">
+                                <i class="fa-solid fa-share-nodes"></i>
                             </button>
                         </div>
                     </div>
@@ -396,6 +406,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     e.stopPropagation();
                     selectUpdate(update, group.date);
                     openTweetModal();
+                });
+
+                // Single card star button click event
+                const cardStarBtn = cardDiv.querySelector('.btn-star-card');
+                cardStarBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleStarUpdate(update);
                 });
                 
                 listDiv.appendChild(cardDiv);
@@ -438,6 +455,22 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.update-card.selected').forEach(card => {
             card.classList.remove('selected');
         });
+    }
+
+    function toggleStarUpdate(update) {
+        const isStarred = appState.starredIds.has(update.id);
+        if (isStarred) {
+            appState.starredIds.delete(update.id);
+            showToast('Removed from Bookmarks.', 'warning');
+        } else {
+            appState.starredIds.add(update.id);
+            showToast('Added to Bookmarks!', 'success');
+        }
+        
+        localStorage.setItem('starred_updates_ids', JSON.stringify(Array.from(appState.starredIds)));
+        
+        calculateStats();
+        renderFeed();
     }
 
     // --- API Key / Settings Modal Management ---
@@ -904,5 +937,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- App Init ---
+    const savedStarred = localStorage.getItem('starred_updates_ids');
+    if (savedStarred) {
+        appState.starredIds = new Set(JSON.parse(savedStarred));
+    }
     fetchReleaseNotes();
 });
