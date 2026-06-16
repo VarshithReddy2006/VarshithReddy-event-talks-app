@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedUpdate: null,   // Selected update object: { id, date, category, text, html }
         searchQuery: '',        // Current search input value
         activeCategory: 'all',  // Current active category filter
+        activeTag: 'all',       // Current active tag/domain filter
         lastFetched: '',
         activePlatform: 'twitter' // Current active composer platform: twitter, linkedin, slack
     };
@@ -72,6 +73,10 @@ document.addEventListener('DOMContentLoaded', () => {
         composerTextareaLabel: document.getElementById('composer-textarea-label'),
         submitBtnIcon: document.getElementById('submit-btn-icon'),
         submitBtnText: document.getElementById('submit-btn-text'),
+        
+        // Tag Elements
+        tagFiltersContainer: document.getElementById('tag-filters'),
+        tagsBreakdownList: document.getElementById('tags-breakdown-list'),
         
         // Toasts
         toastContainer: document.getElementById('toast-container')
@@ -169,11 +174,19 @@ document.addEventListener('DOMContentLoaded', () => {
         let featuresCount = 0;
         let daysCovered = appState.releaseNotes.length;
         
+        // Count updates per domain tag
+        let tagCounts = {};
+        
         appState.releaseNotes.forEach(group => {
             totalUpdates += group.updates.length;
             group.updates.forEach(u => {
                 if (u.category && u.category.toLowerCase() === 'feature') {
                     featuresCount++;
+                }
+                if (u.tags) {
+                    u.tags.forEach(tag => {
+                        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+                    });
                 }
             });
         });
@@ -181,12 +194,90 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.statTotalUpdates.textContent = totalUpdates;
         elements.statFeaturesCount.textContent = featuresCount;
         elements.statDaysCovered.textContent = daysCovered;
+        
+        // Render tag breakdown list in the sidebar
+        elements.tagsBreakdownList.innerHTML = '';
+        
+        // Sort tags by frequency
+        const sortedTags = Object.keys(tagCounts).sort((a, b) => tagCounts[b] - tagCounts[a]);
+        
+        sortedTags.forEach(tag => {
+            const count = tagCounts[tag];
+            const percent = totalUpdates > 0 ? Math.round((count / totalUpdates) * 100) : 0;
+            
+            const tagStatItem = document.createElement('div');
+            tagStatItem.className = 'tag-stat-item';
+            tagStatItem.style.display = 'flex';
+            tagStatItem.style.flexDirection = 'column';
+            tagStatItem.style.gap = '0.25rem';
+            tagStatItem.style.marginBottom = '0.55rem';
+            
+            tagStatItem.innerHTML = `
+                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600;">
+                    <span style="color: var(--text-secondary);">${tag}</span>
+                    <span style="color: var(--text-primary);">${count}</span>
+                </div>
+                <div style="width: 100%; height: 6px; background: rgba(255, 255, 255, 0.03); border-radius: var(--radius-full); overflow: hidden; border: 1px solid var(--border-color);">
+                    <div style="width: ${percent}%; height: 100%; background: linear-gradient(90deg, var(--accent-indigo) 0%, var(--accent-cyan) 100%); border-radius: var(--radius-full);"></div>
+                </div>
+            `;
+            
+            elements.tagsBreakdownList.appendChild(tagStatItem);
+        });
+
+        // Render tag filter chips in control panel
+        elements.tagFiltersContainer.innerHTML = '';
+        
+        // Restore Domain label
+        const spanSpan = document.createElement('span');
+        spanSpan.style.fontSize = '0.8rem';
+        spanSpan.style.fontWeight = '600';
+        spanSpan.style.color = 'var(--text-muted)';
+        spanSpan.style.textTransform = 'uppercase';
+        spanSpan.style.marginRight = '0.5rem';
+        spanSpan.textContent = 'Domain:';
+        elements.tagFiltersContainer.appendChild(spanSpan);
+
+        // Add "All Domains" chip
+        const allDomainsBtn = document.createElement('button');
+        allDomainsBtn.className = `filter-chip ${appState.activeTag === 'all' ? 'active' : ''}`;
+        allDomainsBtn.setAttribute('data-tag', 'all');
+        allDomainsBtn.style.padding = '0.35rem 0.85rem';
+        allDomainsBtn.style.fontSize = '0.8rem';
+        allDomainsBtn.textContent = `All Domains (${totalUpdates})`;
+        allDomainsBtn.addEventListener('click', () => {
+            selectTagFilter('all', allDomainsBtn);
+        });
+        elements.tagFiltersContainer.appendChild(allDomainsBtn);
+
+        // Add each tag chip
+        sortedTags.forEach(tag => {
+            const count = tagCounts[tag];
+            const btn = document.createElement('button');
+            btn.className = `filter-chip ${appState.activeTag === tag ? 'active' : ''}`;
+            btn.setAttribute('data-tag', tag);
+            btn.style.padding = '0.35rem 0.85rem';
+            btn.style.fontSize = '0.8rem';
+            btn.textContent = `${tag} (${count})`;
+            btn.addEventListener('click', () => {
+                selectTagFilter(tag, btn);
+            });
+            elements.tagFiltersContainer.appendChild(btn);
+        });
+    }
+
+    function selectTagFilter(tag, chipElement) {
+        elements.tagFiltersContainer.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+        chipElement.classList.add('active');
+        appState.activeTag = tag;
+        renderFeed();
     }
 
     // --- Filtering & Searching Logic ---
     function getFilteredNotes() {
         const query = appState.searchQuery.toLowerCase().trim();
         const category = appState.activeCategory;
+        const tag = appState.activeTag;
         
         let filtered = [];
         
@@ -195,14 +286,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Filter by category
                 const catMatches = (category === 'all' || update.category.toLowerCase() === category.toLowerCase());
                 
+                // Filter by tag
+                const tagMatches = (tag === 'all' || (update.tags && update.tags.includes(tag)));
+                
                 // Filter by search text
                 const textMatches = (!query || 
                     update.text.toLowerCase().includes(query) || 
                     update.category.toLowerCase().includes(query) ||
-                    group.date.toLowerCase().includes(query)
+                    group.date.toLowerCase().includes(query) ||
+                    (update.tags && update.tags.some(t => t.toLowerCase().includes(query)))
                 );
                 
-                return catMatches && textMatches;
+                return catMatches && tagMatches && textMatches;
             });
             
             if (matchedUpdates.length > 0) {
@@ -264,11 +359,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 cardDiv.innerHTML = `
                     <div class="card-header">
-                        <div class="card-title-area">
-                            <div class="card-select-checkbox">
-                                <i class="fa-solid fa-check"></i>
+                        <div class="card-title-area" style="display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; width: 100%;">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div class="card-select-checkbox">
+                                    <i class="fa-solid fa-check"></i>
+                                </div>
+                                <span class="badge ${badgeClass}">${badgeText}</span>
                             </div>
-                            <span class="badge ${badgeClass}">${badgeText}</span>
+                            <div class="card-tags" style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.25rem;">
+                                ${update.tags ? update.tags.map(t => `<span class="tag-badge" style="font-size: 0.7rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); color: var(--text-secondary); padding: 0.15rem 0.5rem; border-radius: var(--radius-sm); font-weight: 500;">${t}</span>`).join('') : ''}
+                            </div>
                         </div>
                         <div class="card-actions">
                             <button class="btn-icon-sm btn-tweet-sm btn-card-tweet" title="Tweet this update">
@@ -638,7 +738,9 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.filterCategories.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
         elements.filterCategories.querySelector('[data-category="all"]').classList.add('active');
         appState.activeCategory = 'all';
+        appState.activeTag = 'all';
         
+        calculateStats(); // Refreshes Tag Filters in active state
         renderFeed();
     });
 

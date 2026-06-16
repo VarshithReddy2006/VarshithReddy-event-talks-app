@@ -24,6 +24,34 @@ def clean_html_for_text(html_content):
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
+def classify_update_tags(text):
+    text_lower = text.lower()
+    tags = []
+    
+    rules = {
+        "SQL & Querying": ["sql", "query", "select", "join", "table", "syntax", "analytical", "udf", "stored procedure"],
+        "Machine Learning & AI": ["bqml", "ml", "generative ai", "gemini", "vertex", "model", "predict", "llm", "ai.", "vector", "embed"],
+        "Security & Identity": ["security", "iam", "permission", "encryption", "kms", "policy", "grant", "governance", "vpc", "credentials", "authorized", "role"],
+        "Performance & Storage": ["performance", "cost", "price", "pricing", "billing", "capacity", "optimize", "partition", "cluster", "slots", "reservation", "index", "search"],
+        "Studio & Console": ["studio", "console", "ui", "workspace", "editor", "explorer", "history", "pane", "tab", "chart"],
+        "Ingestion & Transfer": ["ingest", "load", "export", "stream", "transfer", "pubsub", "gcs", "storage", "format", "json", "avro", "parquet", "csv"]
+    }
+    
+    for tag, keywords in rules.items():
+        for keyword in keywords:
+            if keyword == "ai.":
+                if "ai." in text_lower:
+                    tags.append(tag)
+                    break
+            elif keyword in text_lower:
+                tags.append(tag)
+                break
+                
+    if not tags:
+        tags.append("General Admin")
+        
+    return tags
+
 def parse_feed_xml(xml_data):
     root = ET.fromstring(xml_data)
     ns = {'ns': 'http://www.w3.org/2005/Atom'}
@@ -54,7 +82,8 @@ def parse_feed_xml(xml_data):
                     "id": f"{title.replace(' ', '_').replace(',', '')}_0",
                     "category": "General",
                     "html": first_part,
-                    "text": text
+                    "text": text,
+                    "tags": classify_update_tags(text)
                 })
                 
         for idx, part in enumerate(parts[1:]):
@@ -72,7 +101,8 @@ def parse_feed_xml(xml_data):
                     "id": f"{title.replace(' ', '_').replace(',', '')}_{idx + 1}",
                     "category": category,
                     "html": body,
-                    "text": text
+                    "text": text,
+                    "tags": classify_update_tags(text)
                 })
                 
         if updates:
