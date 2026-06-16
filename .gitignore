@@ -121,4 +121,5 @@ share/
 
 # User credentials
 config.json
-
+config.json.bak
+companion.db

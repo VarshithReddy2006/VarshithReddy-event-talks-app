@@ -35,39 +35,63 @@ print = safe_print
 
 app = Flask(__name__)
 
+from database import (
+    init_db,
+    db_get_setting,
+    db_set_setting,
+    db_get_cache,
+    db_set_cache,
+    db_add_known_entry,
+    db_load_all_known_entries
+)
+
+# Initialize SQLite database schema
+init_db()
+
 CONFIG_FILE = "config.json"
 
-# Global state for background worker
-known_entry_ids = set()
+# Global state for background worker (pre-populated from DB on boot)
+known_entry_ids = db_load_all_known_entries()
+
 background_status = {
     "last_sync_time": "Never",
     "sync_count": 0,
     "status": "Inactive"
 }
 
+# Auto-migration of old credentials from config.json to SQLite database
+if os.path.exists(CONFIG_FILE):
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            old_config = json.load(f)
+        migration_success = True
+        if old_config.get('gemini_api_key'):
+            migration_success = db_set_setting('gemini_api_key', old_config['gemini_api_key']) and migration_success
+        if old_config.get('slack_webhook_url'):
+            migration_success = db_set_setting('slack_webhook_url', old_config['slack_webhook_url']) and migration_success
+        if migration_success:
+            print("[Database] Migrated credentials from config.json to SQLite successfully.")
+            # Rename config.json to config.json.bak to prevent repeat migration
+            os.rename(CONFIG_FILE, CONFIG_FILE + ".bak")
+            print("[Database] Archived config.json to config.json.bak.")
+    except Exception as e:
+        print(f"[Database Error] Migration from config.json failed: {e}")
+
 def load_config():
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, 'r') as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
+    """Deprecated: Kept for backward compatibility. Directs to Database."""
+    return {
+        "gemini_api_key": db_get_setting("gemini_api_key"),
+        "slack_webhook_url": db_get_setting("slack_webhook_url")
+    }
 
 def save_config(config_data):
-    try:
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config_data, f, indent=4)
-        return True
-    except Exception:
-        return False
-
-
-# Simple in-memory cache to prevent overloading Google's feeds
-cache = {
-    "data": None,
-    "last_fetched": None
-}
+    """Deprecated: Kept for backward compatibility. Directs to Database."""
+    success = True
+    if "gemini_api_key" in config_data:
+        success = db_set_setting("gemini_api_key", config_data["gemini_api_key"]) and success
+    if "slack_webhook_url" in config_data:
+        success = db_set_setting("slack_webhook_url", config_data["slack_webhook_url"]) and success
+    return success
 
 FEED_URL = "https://docs.cloud.google.com/feeds/bigquery-release-notes.xml"
 
@@ -178,24 +202,29 @@ def background_sync_worker():
     # Wait a bit on start to let the app initialize and make the first load
     time.sleep(5)
     
-    # First-time load to populate known IDs (so we don't alert on boot)
-    try:
-        req = urllib.request.Request(
-            FEED_URL, 
-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AntigravityFeedReader/1.0'}
-        )
-        with urllib.request.urlopen(req, timeout=10) as response:
-            xml_data = response.read()
-        root = ET.fromstring(xml_data)
-        ns = {'ns': 'http://www.w3.org/2005/Atom'}
-        entries = root.findall('ns:entry', ns)
-        for entry in entries:
-            entry_id_el = entry.find('ns:id', ns)
-            if entry_id_el is not None:
-                known_entry_ids.add(entry_id_el.text)
-        print(f"[Background Sync] Initialized. Loaded {len(known_entry_ids)} known entries.")
-    except Exception as e:
-        print("[Background Sync] Initialization error:", str(e))
+    # If the database has no known entry IDs (first run), populate it with current entries
+    if not known_entry_ids:
+        try:
+            req = urllib.request.Request(
+                FEED_URL, 
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AntigravityFeedReader/1.0'}
+            )
+            with urllib.request.urlopen(req, timeout=10) as response:
+                xml_data = response.read()
+            root = ET.fromstring(xml_data)
+            ns = {'ns': 'http://www.w3.org/2005/Atom'}
+            entries = root.findall('ns:entry', ns)
+            for entry in entries:
+                entry_id_el = entry.find('ns:id', ns)
+                if entry_id_el is not None:
+                    entry_id = entry_id_el.text
+                    db_add_known_entry(entry_id)
+                    known_entry_ids.add(entry_id)
+            print(f"[Background Sync] First-time run: populated {len(known_entry_ids)} entries in DB.")
+        except Exception as e:
+            print("[Background Sync] Initialization error:", str(e))
+    else:
+        print(f"[Background Sync] Loaded {len(known_entry_ids)} known entries from SQLite database.")
         
     while True:
         # Loop every 10 minutes (600 seconds)
@@ -271,12 +300,12 @@ def background_sync_worker():
                                 
                     entry_id_el = entry.find('ns:id', ns)
                     if entry_id_el is not None:
-                        known_entry_ids.add(entry_id_el.text)
+                        entry_id = entry_id_el.text
+                        db_add_known_entry(entry_id)
+                        known_entry_ids.add(entry_id)
                 
-                # Update global cache
-                parsed_data = parse_feed_xml(xml_data)
-                cache["data"] = parsed_data
-                cache["last_fetched"] = datetime.now().strftime("%I:%M:%S %p")
+                # Update SQLite feed cache
+                db_set_cache(xml_data.decode('utf-8') if isinstance(xml_data, bytes) else xml_data)
                 
             background_status["sync_count"] += 1
             background_status["last_sync_time"] = datetime.now().strftime("%I:%M:%S %p")
@@ -297,32 +326,47 @@ def index():
 def get_release_notes():
     force_refresh = request.args.get('refresh', 'false').lower() == 'true'
     
-    if force_refresh or cache["data"] is None:
+    xml_data = None
+    last_fetched = None
+    
+    # If not forcing refresh, check database cache
+    if not force_refresh:
+        xml_data, last_fetched = db_get_cache()
+        
+    if force_refresh or xml_data is None:
         try:
             req = urllib.request.Request(
                 FEED_URL, 
                 headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AntigravityFeedReader/1.0'}
             )
             with urllib.request.urlopen(req, timeout=10) as response:
-                xml_data = response.read()
+                xml_data_bytes = response.read()
+                xml_data = xml_data_bytes.decode('utf-8')
             
-            parsed_data = parse_feed_xml(xml_data)
-            cache["data"] = parsed_data
-            cache["last_fetched"] = datetime.now().strftime("%I:%M:%S %p")
+            last_fetched = db_set_cache(xml_data)
         except Exception as e:
-            # Fallback to cache if available
-            if cache["data"] is not None:
-                return jsonify({
-                    "data": cache["data"],
-                    "last_fetched": cache["last_fetched"],
-                    "warning": f"Could not connect to BigQuery feed. Displaying cached copy."
-                })
+            # Fallback to database cache if available
+            db_xml, db_time = db_get_cache()
+            if db_xml is not None:
+                try:
+                    parsed_data = parse_feed_xml(db_xml.encode('utf-8'))
+                    return jsonify({
+                        "data": parsed_data,
+                        "last_fetched": db_time,
+                        "warning": f"Could not connect to BigQuery feed. Displaying cached copy from database."
+                    })
+                except Exception:
+                    pass
             return jsonify({"error": f"Failed to retrieve feed: {str(e)}"}), 500
             
-    return jsonify({
-        "data": cache["data"],
-        "last_fetched": cache["last_fetched"]
-    })
+    try:
+        parsed_data = parse_feed_xml(xml_data.encode('utf-8'))
+        return jsonify({
+            "data": parsed_data,
+            "last_fetched": last_fetched
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to parse release notes: {str(e)}"}), 500
 
 @app.route('/api/generate-post', methods=['POST'])
 def generate_post():
