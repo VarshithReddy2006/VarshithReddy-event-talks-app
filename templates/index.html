@@ -172,8 +172,8 @@
         <div class="modal-content glass">
             <div class="modal-header">
                 <div class="modal-title">
-                    <i class="fa-brands fa-x-twitter title-icon"></i>
-                    <h2>Compile X/Twitter Post</h2>
+                    <i class="fa-solid fa-paper-plane title-icon" id="modal-title-icon" style="color: var(--accent-indigo);"></i>
+                    <h2 id="modal-title-text">Compile Release Broadcast</h2>
                 </div>
                 <button class="modal-close" id="btn-close-modal">
                     <i class="fa-solid fa-xmark"></i>
@@ -184,9 +184,21 @@
                     <span class="snippet-lbl">Reference Snippet:</span>
                     <p id="modal-snippet-text"></p>
                 </div>
+
+                <div class="composer-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+                    <button class="composer-tab-btn active" data-platform="twitter" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem; background: none; border: none; padding: 0.75rem 0.5rem; color: var(--text-primary); font-family: inherit; font-weight: 600; font-size: 0.9rem; cursor: pointer; border-bottom: 2px solid var(--accent-indigo); transition: var(--transition-fast);">
+                        <i class="fa-brands fa-x-twitter"></i> X / Twitter
+                    </button>
+                    <button class="composer-tab-btn" data-platform="linkedin" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem; background: none; border: none; padding: 0.75rem 0.5rem; color: var(--text-secondary); font-family: inherit; font-weight: 600; font-size: 0.9rem; cursor: pointer; border-bottom: 2px solid transparent; transition: var(--transition-fast);">
+                        <i class="fa-brands fa-linkedin"></i> LinkedIn
+                    </button>
+                    <button class="composer-tab-btn" data-platform="slack" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem; background: none; border: none; padding: 0.75rem 0.5rem; color: var(--text-secondary); font-family: inherit; font-weight: 600; font-size: 0.9rem; cursor: pointer; border-bottom: 2px solid transparent; transition: var(--transition-fast);">
+                        <i class="fa-brands fa-slack"></i> Slack
+                    </button>
+                </div>
                 
                 <div class="composer-container">
-                    <label for="tweet-textarea" class="composer-lbl">Customize Tweet Content</label>
+                    <label for="tweet-textarea" class="composer-lbl" id="composer-textarea-label">Customize Post Content</label>
                     <textarea id="tweet-textarea" rows="6" placeholder="What's happening?"></textarea>
                     
                     <div class="composer-meta">
@@ -216,16 +228,16 @@
                         </select>
                         <button id="btn-generate-ai" class="btn btn-primary" style="padding: 0.6rem 1rem; font-size: 0.9rem;">
                             <i class="fa-solid fa-spinner fa-spin" id="ai-spinner" style="display: none; margin-right: 0.25rem;"></i>
-                            <span>Draft Tweet</span>
+                            <span id="btn-generate-ai-text">Draft Post</span>
                         </button>
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button id="btn-modal-cancel" class="btn btn-secondary">Discard</button>
-                <button id="btn-modal-submit" class="btn btn-primary btn-tweet">
-                    <i class="fa-brands fa-x-twitter"></i>
-                    <span>Share on X</span>
+                <button id="btn-modal-submit" class="btn btn-primary btn-tweet" style="transition: var(--transition-normal);">
+                    <i class="fa-brands fa-x-twitter" id="submit-btn-icon"></i>
+                    <span id="submit-btn-text">Share on X</span>
                 </button>
             </div>
         </div>
@@ -243,15 +255,21 @@
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 1.25rem;">
                 <div class="composer-container">
                     <label for="gemini-key-input" class="composer-lbl">Gemini API Key</label>
                     <input type="password" id="gemini-key-input" placeholder="Paste your API key here (AIzaSy...)" style="width: 100%; background: rgba(3, 7, 18, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem; color: var(--text-primary); font-family: inherit; font-size: 0.95rem; margin-bottom: 0.5rem; transition: var(--transition-normal);">
                     <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">This key is saved locally in your browser's <code>localStorage</code> and never sent to our servers except to call the Google Gemini API endpoint.</p>
                 </div>
+                
+                <div class="composer-container" style="border-top: 1px solid var(--border-color); padding-top: 1.25rem;">
+                    <label for="slack-url-input" class="composer-lbl">Slack Incoming Webhook URL (Optional)</label>
+                    <input type="password" id="slack-url-input" placeholder="Paste your Slack Webhook URL here (https://hooks.slack.com/...)" style="width: 100%; background: rgba(3, 7, 18, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem; color: var(--text-primary); font-family: inherit; font-size: 0.95rem; margin-bottom: 0.5rem; transition: var(--transition-normal);">
+                    <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">Configure this if you want to broadcast release notes directly to an internal Slack channel.</p>
+                </div>
             </div>
             <div class="modal-footer">
-                <button id="btn-save-settings" class="btn btn-primary">Save Key</button>
+                <button id="btn-save-settings" class="btn btn-primary">Save Settings</button>
             </div>
         </div>
     </div>

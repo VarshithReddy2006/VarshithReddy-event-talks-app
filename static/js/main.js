@@ -10,7 +10,8 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedUpdate: null,   // Selected update object: { id, date, category, text, html }
         searchQuery: '',        // Current search input value
         activeCategory: 'all',  // Current active category filter
-        lastFetched: ''
+        lastFetched: '',
+        activePlatform: 'twitter' // Current active composer platform: twitter, linkedin, slack
     };
 
     // --- DOM Elements ---
@@ -55,12 +56,22 @@ document.addEventListener('DOMContentLoaded', () => {
         settingsModal: document.getElementById('settings-modal'),
         btnCloseSettings: document.getElementById('btn-close-settings'),
         geminiKeyInput: document.getElementById('gemini-key-input'),
+        slackUrlInput: document.getElementById('slack-url-input'),
         btnSaveSettings: document.getElementById('btn-save-settings'),
         
         // AI Generator
         aiToneSelect: document.getElementById('ai-tone-select'),
         btnGenerateAi: document.getElementById('btn-generate-ai'),
+        btnGenerateAiText: document.getElementById('btn-generate-ai-text'),
         aiSpinner: document.getElementById('ai-spinner'),
+
+        // Composer Multi-Platform Tab Elements
+        composerTabBtns: document.querySelectorAll('.composer-tab-btn'),
+        modalTitleIcon: document.getElementById('modal-title-icon'),
+        modalTitleText: document.getElementById('modal-title-text'),
+        composerTextareaLabel: document.getElementById('composer-textarea-label'),
+        submitBtnIcon: document.getElementById('submit-btn-icon'),
+        submitBtnText: document.getElementById('submit-btn-text'),
         
         // Toasts
         toastContainer: document.getElementById('toast-container')
@@ -331,8 +342,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- API Key / Settings Modal Management ---
     function openSettingsModal() {
-        const key = localStorage.getItem('gemini_api_key') || '';
-        elements.geminiKeyInput.value = key;
+        elements.geminiKeyInput.value = localStorage.getItem('gemini_api_key') || '';
+        elements.slackUrlInput.value = localStorage.getItem('slack_webhook_url') || '';
         elements.settingsModal.classList.add('active');
     }
 
@@ -342,18 +353,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function saveSettings() {
         const key = elements.geminiKeyInput.value.trim();
+        const slackUrl = elements.slackUrlInput.value.trim();
+        
         if (key) {
             localStorage.setItem('gemini_api_key', key);
-            showToast('Gemini API key saved successfully!', 'success');
         } else {
             localStorage.removeItem('gemini_api_key');
-            showToast('Gemini API key cleared.', 'warning');
         }
+        
+        if (slackUrl) {
+            localStorage.setItem('slack_webhook_url', slackUrl);
+        } else {
+            localStorage.removeItem('slack_webhook_url');
+        }
+        
+        showToast('Settings saved successfully!', 'success');
         closeSettingsModal();
     }
 
-    // --- AI Tweet Generation ---
-    async function generateAiTweet() {
+    // --- AI Post Generation ---
+    async function generateAiPost() {
         const apiKey = localStorage.getItem('gemini_api_key');
         if (!apiKey) {
             showToast('Please set your Gemini API key in settings first.', 'warning');
@@ -369,12 +388,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Set Loading State
         elements.btnGenerateAi.disabled = true;
         elements.aiSpinner.style.display = 'inline-block';
-        const originalBtnText = elements.btnGenerateAi.querySelector('span').textContent;
-        elements.btnGenerateAi.querySelector('span').textContent = 'Drafting...';
+        const originalBtnText = elements.btnGenerateAiText.textContent;
+        elements.btnGenerateAiText.textContent = 'Drafting...';
 
         try {
             const tone = elements.aiToneSelect.value;
-            const response = await fetch('/api/generate-tweet', {
+            const platform = appState.activePlatform;
+            const response = await fetch('/api/generate-post', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -384,7 +404,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     text: appState.selectedUpdate.text,
                     date: appState.selectedUpdate.date,
                     category: appState.selectedUpdate.category,
-                    tone: tone
+                    tone: tone,
+                    platform: platform
                 })
             });
 
@@ -394,38 +415,124 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const data = await response.json();
-            if (data.tweet) {
-                elements.tweetTextarea.value = data.tweet;
+            if (data.post) {
+                elements.tweetTextarea.value = data.post;
                 updateCharCount();
-                showToast(`Tweet generated with ${tone} tone!`, 'success');
+                showToast(`${platform.toUpperCase()} draft generated with ${tone} tone!`, 'success');
             } else {
-                throw new Error('No tweet returned by generator.');
+                throw new Error('No content returned by generator.');
             }
 
         } catch (error) {
-            console.error('AI Tweet generation error:', error);
+            console.error('AI Post generation error:', error);
             showToast(error.message, 'error');
         } finally {
             elements.btnGenerateAi.disabled = false;
             elements.aiSpinner.style.display = 'none';
-            elements.btnGenerateAi.querySelector('span').textContent = originalBtnText;
+            elements.btnGenerateAiText.textContent = originalBtnText;
         }
     }
 
-    // --- Tweet Composers & Modal ---
-    function generateInitialTweetText(date, category, text) {
-        const header = `🚀 BigQuery Update [${date}] • #${category}\n\n`;
-        const footer = `\n\n#BigQuery #GCP #Cloud`;
+    // --- Tab / Platform UI Swapping ---
+    function switchPlatformTab(platform) {
+        appState.activePlatform = platform;
         
-        // Character Limits (Twitter max is 280)
-        const allowedBodyLength = 280 - header.length - footer.length;
+        // Update active class on tab buttons
+        elements.composerTabBtns.forEach(btn => {
+            if (btn.getAttribute('data-platform') === platform) {
+                btn.classList.add('active');
+                btn.style.borderBottomColor = 'var(--accent-indigo)';
+                btn.style.color = 'var(--text-primary)';
+            } else {
+                btn.classList.remove('active');
+                btn.style.borderBottomColor = 'transparent';
+                btn.style.color = 'var(--text-secondary)';
+            }
+        });
         
-        let body = text;
-        if (body.length > allowedBodyLength) {
-            body = body.substring(0, allowedBodyLength - 3) + '...';
+        updatePlatformUI();
+    }
+
+    function updatePlatformUI() {
+        const platform = appState.activePlatform;
+        const update = appState.selectedUpdate;
+        if (!update) return;
+
+        // Reset submit button classes
+        elements.btnModalSubmit.className = 'btn btn-primary';
+        
+        if (platform === 'twitter') {
+            elements.modalTitleIcon.className = 'fa-brands fa-x-twitter title-icon';
+            elements.modalTitleIcon.style.color = '#1d9bf0';
+            elements.modalTitleText.textContent = 'Compile X / Twitter Post';
+            elements.composerTextareaLabel.textContent = 'Customize Tweet Content';
+            elements.btnGenerateAiText.textContent = 'Draft Tweet';
+            
+            elements.submitBtnIcon.className = 'fa-brands fa-x-twitter';
+            elements.submitBtnText.textContent = 'Share on X';
+            elements.btnModalSubmit.classList.add('btn-tweet');
+            
+            // Re-draft standard Twitter template
+            elements.tweetTextarea.value = generateInitialPostText('twitter', update.date, update.category, update.text);
+        } 
+        else if (platform === 'linkedin') {
+            elements.modalTitleIcon.className = 'fa-brands fa-linkedin title-icon';
+            elements.modalTitleIcon.style.color = '#0077b5';
+            elements.modalTitleText.textContent = 'Compile LinkedIn Update';
+            elements.composerTextareaLabel.textContent = 'Customize LinkedIn Post';
+            elements.btnGenerateAiText.textContent = 'Draft Post';
+            
+            elements.submitBtnIcon.className = 'fa-solid fa-copy';
+            elements.submitBtnText.textContent = 'Copy & Open LinkedIn';
+            // Custom LinkedIn Styling
+            elements.btnModalSubmit.style.backgroundColor = '#0077b5';
+            elements.btnModalSubmit.style.boxShadow = '0 4px 12px rgba(0, 119, 181, 0.25)';
+            
+            elements.tweetTextarea.value = generateInitialPostText('linkedin', update.date, update.category, update.text);
+        }
+        else if (platform === 'slack') {
+            elements.modalTitleIcon.className = 'fa-brands fa-slack title-icon';
+            elements.modalTitleIcon.style.color = '#4a154b';
+            elements.modalTitleText.textContent = 'Compile Slack Announcement';
+            elements.composerTextareaLabel.textContent = 'Customize Slack Message';
+            elements.btnGenerateAiText.textContent = 'Draft Announcement';
+            
+            elements.submitBtnIcon.className = 'fa-solid fa-paper-plane';
+            elements.submitBtnText.textContent = 'Post to Slack';
+            // Custom Slack Styling
+            elements.btnModalSubmit.style.backgroundColor = '#4a154b';
+            elements.btnModalSubmit.style.boxShadow = '0 4px 12px rgba(74, 21, 75, 0.25)';
+            
+            elements.tweetTextarea.value = generateInitialPostText('slack', update.date, update.category, update.text);
         }
         
-        return `${header}${body}${footer}`;
+        updateCharCount();
+    }
+
+    function generateInitialPostText(platform, date, category, text) {
+        if (platform === 'twitter') {
+            const header = `🚀 BigQuery Update [${date}] • #${category}\n\n`;
+            const footer = `\n\n#BigQuery #GCP #Cloud`;
+            const allowedBodyLength = 280 - header.length - footer.length;
+            let body = text;
+            if (body.length > allowedBodyLength) {
+                body = body.substring(0, allowedBodyLength - 3) + '...';
+            }
+            return `${header}${body}${footer}`;
+        }
+        else if (platform === 'linkedin') {
+            return `📢 Google Cloud BigQuery Update • ${date}\n\n` +
+                   `📍 Category: ${category}\n\n` +
+                   `📰 Release Detail:\n${text}\n\n` +
+                   `#BigQuery #GoogleCloud #DataEngineering #Analytics`;
+        }
+        else if (platform === 'slack') {
+            return `*📢 BigQuery Update - ${date}* \n` +
+                   `• *Category*: _${category}_\n` +
+                   `• *Update*: ${text}\n` +
+                   `• *Detail URL*: <https://docs.cloud.google.com/feeds/bigquery-release-notes.xml|BigQuery Feed>`;
+        }
+        return text;
     }
 
     function openTweetModal() {
@@ -436,11 +543,23 @@ document.addEventListener('DOMContentLoaded', () => {
         // Load original snippet for user reference
         elements.modalSnippetText.textContent = text;
         
-        // Compile initial draft
-        const initialText = generateInitialTweetText(date, category, text);
-        elements.tweetTextarea.value = initialText;
+        // Reset active platform to Twitter
+        appState.activePlatform = 'twitter';
         
-        updateCharCount();
+        // Style tab buttons resetting active class
+        elements.composerTabBtns.forEach(btn => {
+            if (btn.getAttribute('data-platform') === 'twitter') {
+                btn.classList.add('active');
+                btn.style.borderBottomColor = 'var(--accent-indigo)';
+                btn.style.color = 'var(--text-primary)';
+            } else {
+                btn.classList.remove('active');
+                btn.style.borderBottomColor = 'transparent';
+                btn.style.color = 'var(--text-secondary)';
+            }
+        });
+        
+        updatePlatformUI();
         
         // Display modal
         elements.tweetModal.classList.add('active');
@@ -453,13 +572,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateCharCount() {
         const length = elements.tweetTextarea.value.length;
-        elements.charCount.textContent = length;
         
-        // Style changes depending on character allowance
+        // Dynamic character counter limits depending on platform
+        let maxLimit = 280;
+        if (appState.activePlatform === 'linkedin') maxLimit = 2000;
+        if (appState.activePlatform === 'slack') maxLimit = 4000;
+        
+        elements.charCounter.innerHTML = `<span id="char-count">${length}</span>/${maxLimit}`;
+        elements.charCount = document.getElementById('char-count'); // Refresh ref
+        
         elements.charCounter.className = 'char-counter';
-        if (length > 280) {
+        if (length > maxLimit) {
             elements.charCounter.classList.add('danger');
-        } else if (length > 250) {
+        } else if (length > (maxLimit - 30)) {
             elements.charCounter.classList.add('warning');
         }
     }
@@ -537,8 +662,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // AI Tweet Generation Event
-    elements.btnGenerateAi.addEventListener('click', generateAiTweet);
+    // AI Post Generation Event
+    elements.btnGenerateAi.addEventListener('click', generateAiPost);
+
+    // Composer Tab Switching
+    elements.composerTabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const platform = btn.getAttribute('data-platform');
+            switchPlatformTab(platform);
+        });
+    });
 
     // Textarea typing character count listener
     elements.tweetTextarea.addEventListener('input', updateCharCount);
@@ -549,13 +682,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const tag = btn.getAttribute('data-tag');
             const currentVal = elements.tweetTextarea.value;
             
-            // Check if tag already exists in string to prevent duplicates
             if (currentVal.toLowerCase().includes(tag.toLowerCase())) {
-                showToast(`Tag ${tag} is already in the tweet!`, 'warning');
+                showToast(`Tag ${tag} is already in the post!`, 'warning');
                 return;
             }
             
-            // Append with spacer if needed
             if (currentVal.endsWith('\n') || currentVal.endsWith(' ')) {
                 elements.tweetTextarea.value += tag;
             } else {
@@ -567,27 +698,91 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Submit Tweet (Redirects to Web Intent)
-    elements.btnModalSubmit.addEventListener('click', () => {
-        const text = elements.tweetTextarea.value;
+    // Submit Composer (Multi-Platform Action)
+    elements.btnModalSubmit.addEventListener('click', async () => {
+        const text = elements.tweetTextarea.value.trim();
+        const platform = appState.activePlatform;
         
-        if (text.length > 280) {
-            showToast('Cannot tweet! Content exceeds 280 characters limit.', 'error');
+        if (text.length === 0) {
+            showToast('Cannot submit empty message.', 'error');
             return;
         }
         
-        if (text.trim().length === 0) {
-            showToast('Cannot tweet empty message.', 'error');
+        let maxLimit = 280;
+        if (platform === 'linkedin') maxLimit = 2000;
+        if (platform === 'slack') maxLimit = 4000;
+        
+        if (text.length > maxLimit) {
+            showToast(`Content exceeds character limit of ${maxLimit} for ${platform.toUpperCase()}.`, 'error');
             return;
         }
         
-        // Encode and redirect
-        const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
-        window.open(tweetUrl, '_blank');
-        
-        closeTweetModal();
-        deselectUpdate();
-        showToast('Redirected to Twitter/X to post your update!', 'success');
+        if (platform === 'twitter') {
+            const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+            window.open(tweetUrl, '_blank');
+            closeTweetModal();
+            deselectUpdate();
+            showToast('Redirected to Twitter / X!', 'success');
+        } 
+        else if (platform === 'linkedin') {
+            try {
+                await navigator.clipboard.writeText(text);
+                showToast('LinkedIn draft copied to clipboard!', 'success');
+                setTimeout(() => {
+                    window.open('https://www.linkedin.com/feed/', '_blank');
+                }, 800);
+                closeTweetModal();
+                deselectUpdate();
+            } catch (err) {
+                console.error('Failed to copy to clipboard:', err);
+                showToast('Could not copy automatically. Please copy text manually.', 'error');
+            }
+        } 
+        else if (platform === 'slack') {
+            const webhookUrl = localStorage.getItem('slack_webhook_url');
+            if (!webhookUrl) {
+                showToast('Please configure your Slack Webhook URL in Settings first.', 'warning');
+                closeTweetModal();
+                openSettingsModal();
+                return;
+            }
+            
+            // Set loading state on submit button
+            elements.btnModalSubmit.disabled = true;
+            const originalIcon = elements.submitBtnIcon.className;
+            elements.submitBtnIcon.className = 'fa-solid fa-spinner fa-spin';
+            const originalText = elements.submitBtnText.textContent;
+            elements.submitBtnText.textContent = 'Posting...';
+            
+            try {
+                const response = await fetch('/api/send-slack', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: text,
+                        webhook_url: webhookUrl
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.error || `Server returned ${response.status}`);
+                }
+                
+                showToast('Successfully posted to Slack channel!', 'success');
+                closeTweetModal();
+                deselectUpdate();
+            } catch (error) {
+                console.error('Slack post error:', error);
+                showToast(`Failed to send to Slack: ${error.message}`, 'error');
+            } finally {
+                elements.btnModalSubmit.disabled = false;
+                elements.submitBtnIcon.className = originalIcon;
+                elements.submitBtnText.textContent = originalText;
+            }
+        }
     });
 
     // Close modal if clicked outside modal-content

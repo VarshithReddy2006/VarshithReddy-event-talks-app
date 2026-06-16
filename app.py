@@ -119,13 +119,14 @@ def get_release_notes():
         "last_fetched": cache["last_fetched"]
     })
 
-@app.route('/api/generate-tweet', methods=['POST'])
-def generate_tweet():
+@app.route('/api/generate-post', methods=['POST'])
+def generate_post():
     data = request.get_json() or {}
     text = data.get('text', '')
     date = data.get('date', '')
     category = data.get('category', '')
     tone = data.get('tone', 'Tech Enthusiast')
+    platform = data.get('platform', 'twitter').lower()
     
     # Check for API key in header first, then in environment
     api_key = request.headers.get('X-Gemini-Key') or os.environ.get('GEMINI_API_KEY')
@@ -134,25 +135,53 @@ def generate_tweet():
         return jsonify({
             "error": "Gemini API key is missing. Please set it in the settings panel."
         }), 400
-        
-    prompt = f"""You are a developer relations specialist and social media manager.
-Draft a short X/Twitter post (maximum 280 characters including hashtags) announcing the following Google Cloud BigQuery release note.
+
+    # Customize prompt depending on the target platform
+    if platform == 'linkedin':
+        platform_instructions = """
+Draft a professional, engaging LinkedIn update (maximum 2000 characters) announcing this release note.
+Instructions:
+1. Make it professional but engaging, well-suited for a LinkedIn audience of data engineers, architects, and IT decision-makers.
+2. Structure the post using bullet points, bold headers (using unicode bold like 𝗧𝗲𝗰𝗵 if appropriate, or plain text formatting), and emojis for readability.
+3. Explain the business/technical value of this update clearly.
+4. Include relevant professional hashtags at the end, such as #BigQuery #GoogleCloud #DataEngineering #CloudComputing.
+5. Output ONLY the raw post content. No introductory sentences, quotes wrapping the post, or closing notes.
+"""
+    elif platform == 'slack':
+        platform_instructions = """
+Draft an internal Slack team announcement announcing this release note.
+Instructions:
+1. Use Slack Markdown formatting: use asterisks for *bolding*, underscores for _italics_, and proper list items (e.g. • or -).
+2. Start with an announcement title (e.g., "*📢 BigQuery Update: [Date]*").
+3. Include sections: "*What is it?*", "*Key Details*", and "*Action Required / Impact*".
+4. Keep the tone helpful, clear, and informative for internal team developers and analysts.
+5. Output ONLY the raw post content. No introductory sentences, quotes wrapping the post, or closing notes.
+"""
+    else: # Default: twitter
+        platform_instructions = """
+Draft a short X/Twitter post (maximum 280 characters including hashtags) announcing this release note.
+Instructions:
+1. Ensure the final text is strictly under 280 characters (including hashtags).
+2. Include relevant hashtags like #BigQuery #GCP.
+3. Output ONLY the raw tweet text. No introductory sentences, quotes wrapping the post, or explanatory footnotes.
+"""
+
+    prompt = f"""You are a developer relations specialist and technical writer.
+We need to post about the following Google Cloud BigQuery release note:
 
 Release Note Date: {date}
 Category: {category}
 Content: {text}
 
-Requested Tone: {tone}
+Requested Tone: {tone} (Apply this tone to your draft:
+- Professional: Clear, industry-standard language, focuses on business value.
+- Tech Enthusiast: Highlights technical specs, features, and how it helps developers.
+- Hype: Uses emojis, exclamation marks, and highlights major improvements.
+- ELI5: Extremely simple language, explains the core concept in layman terms.)
 
-Instructions:
-1. Ensure the final text is strictly under 280 characters (including hashtags).
-2. Include relevant hashtags like #BigQuery #GCP.
-3. Make it engaging and appropriate for the requested tone:
-   - Professional: Clear, industry-standard language, focuses on business value.
-   - Tech Enthusiast: Highlights technical specs, features, and how it helps developers.
-   - Hype: Uses emojis, exclamation marks, and highlights major improvements.
-   - ELI5: Extremely simple language, explains the core concept in layman terms.
-4. Output ONLY the raw tweet text. Do not include quotes around the tweet, introductory text, or explanatory footnotes."""
+Target Platform Instructions:
+{platform_instructions}
+"""
 
     try:
         import requests as req_lib  # Import locally to prevent variable collision
@@ -189,24 +218,52 @@ Instructions:
         if 'candidates' not in response_data or not response_data['candidates']:
             return jsonify({"error": "No generation candidate returned by Gemini API"}), 500
             
-        tweet_text = response_data['candidates'][0]['content']['parts'][0]['text'].strip()
-        print("=== EXTRACTED TWEET TEXT ===")
-        print(tweet_text)
+        post_text = response_data['candidates'][0]['content']['parts'][0]['text'].strip()
+        print("=== EXTRACTED POST TEXT ===")
+        print(post_text)
         
         # Strip quotes if AI returned it inside quotes
-        if tweet_text.startswith('"') and tweet_text.endswith('"'):
-            tweet_text = tweet_text[1:-1].strip()
-        elif tweet_text.startswith("'") and tweet_text.endswith("'"):
-            tweet_text = tweet_text[1:-1].strip()
+        if post_text.startswith('"') and post_text.endswith('"'):
+            post_text = post_text[1:-1].strip()
+        elif post_text.startswith("'") and post_text.endswith("'"):
+            post_text = post_text[1:-1].strip()
             
-        print("=== FINAL TWEET TEXT ===")
-        print(tweet_text)
+        print("=== FINAL POST TEXT ===")
+        print(post_text)
         print("=======================\n")
             
-        return jsonify({"tweet": tweet_text})
+        return jsonify({"post": post_text})
         
     except Exception as e:
-        return jsonify({"error": f"Failed to generate tweet: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to generate post: {str(e)}"}), 500
+
+@app.route('/api/send-slack', methods=['POST'])
+def send_slack():
+    data = request.get_json() or {}
+    message = data.get('message', '')
+    webhook_url = data.get('webhook_url') or os.environ.get('SLACK_WEBHOOK_URL')
+    
+    if not webhook_url:
+        return jsonify({"error": "Slack Webhook URL is missing. Please configure it in Settings."}), 400
+        
+    if not message:
+        return jsonify({"error": "Message is empty."}), 400
+        
+    try:
+        import requests as req_lib
+        payload = {
+            "text": message
+        }
+        headers = {'Content-Type': 'application/json'}
+        response = req_lib.post(webhook_url, json=payload, headers=headers, timeout=10)
+        
+        if response.status_code not in [200, 201]:
+            return jsonify({"error": f"Slack API returned {response.status_code}: {response.text}"}), 400
+            
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": f"Failed to send to Slack: {str(e)}"}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000)
