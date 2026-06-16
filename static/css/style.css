@@ -884,6 +884,7 @@ body {
 .modal-content {
     width: 100%;
     max-width: 600px;
+    max-height: 90vh;
     margin: 1.5rem;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
     transform: scale(0.95);
@@ -947,6 +948,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
+    overflow-y: auto;
 }
 
 .original-snippet {
