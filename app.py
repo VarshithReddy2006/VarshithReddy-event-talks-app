@@ -163,7 +163,7 @@ Instructions:
                 "parts": [{"text": prompt}]
             }],
             "generationConfig": {
-                "maxOutputTokens": 200,
+                "maxOutputTokens": 1024,
                 "temperature": 0.7
             }
         }
@@ -180,16 +180,28 @@ Instructions:
             
         response_data = response.json()
         
+        # Debugging logs
+        print("\n=== GEMINI REQUEST PROMPT ===")
+        print(prompt)
+        print("=== GEMINI RAW RESPONSE ===")
+        print(response_data)
+        
         if 'candidates' not in response_data or not response_data['candidates']:
             return jsonify({"error": "No generation candidate returned by Gemini API"}), 500
             
         tweet_text = response_data['candidates'][0]['content']['parts'][0]['text'].strip()
+        print("=== EXTRACTED TWEET TEXT ===")
+        print(tweet_text)
         
         # Strip quotes if AI returned it inside quotes
         if tweet_text.startswith('"') and tweet_text.endswith('"'):
             tweet_text = tweet_text[1:-1].strip()
         elif tweet_text.startswith("'") and tweet_text.endswith("'"):
             tweet_text = tweet_text[1:-1].strip()
+            
+        print("=== FINAL TWEET TEXT ===")
+        print(tweet_text)
+        print("=======================\n")
             
         return jsonify({"tweet": tweet_text})
         
