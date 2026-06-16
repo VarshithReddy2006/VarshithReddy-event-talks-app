@@ -7,6 +7,31 @@ from flask import Flask, jsonify, render_template, request
 import json
 import threading
 import time
+import builtins
+
+def safe_print(*args, **kwargs):
+    try:
+        builtins.print(*args, **kwargs)
+    except UnicodeEncodeError:
+        new_args = []
+        for arg in args:
+            if isinstance(arg, str):
+                new_args.append(arg.encode('ascii', errors='backslashreplace').decode('ascii'))
+            elif isinstance(arg, (dict, list)):
+                try:
+                    s = json.dumps(arg, indent=2)
+                    new_args.append(s.encode('ascii', errors='backslashreplace').decode('ascii'))
+                except Exception:
+                    new_args.append(repr(arg))
+            else:
+                new_args.append(arg)
+        try:
+            builtins.print(*new_args, **kwargs)
+        except Exception:
+            pass
+
+# Override built-in print for app.py
+print = safe_print
 
 app = Flask(__name__)
 

@@ -682,8 +682,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const update = appState.selectedUpdate;
         if (!update) return;
 
-        // Reset submit button classes
+        // Reset submit button classes and inline styles
         elements.btnModalSubmit.className = 'btn btn-primary';
+        elements.btnModalSubmit.style.backgroundColor = '';
+        elements.btnModalSubmit.style.boxShadow = '';
         
         if (platform === 'twitter') {
             elements.modalTitleIcon.className = 'fa-brands fa-x-twitter title-icon';
