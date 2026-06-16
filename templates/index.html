@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BigQuery Release Notes Hub & Social Compiler</title>
+    <meta name="description" content="View the latest Google Cloud BigQuery release notes, filter updates, and compile tweets instantly.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Background Glow Blobs -->
+    <div class="glow-blob blob-1"></div>
+    <div class="glow-blob blob-2"></div>
+    <div class="glow-blob blob-3"></div>
+
+    <!-- Main Container -->
+    <div class="app-container">
+        
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-logo">
+                <div class="logo-icon">
+                    <i class="fa-solid fa-database"></i>
+                </div>
+                <div class="logo-text">
+                    <h1>BigQuery</h1>
+                    <span>Release Companion</span>
+                </div>
+            </div>
+            
+            <div class="header-actions">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span id="last-updated-time">Checking...</span>
+                </div>
+                <button id="btn-refresh" class="btn btn-primary" title="Refresh Release Notes">
+                    <i class="fa-solid fa-arrows-rotate" id="refresh-icon"></i>
+                    <span>Refresh</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Search and Filter Bar -->
+        <section class="control-panel glass">
+            <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                <input type="text" id="search-input" placeholder="Search updates (e.g., 'Gemini', 'JSON', 'partition')..." autocomplete="off">
+                <button id="search-clear-btn" class="clear-btn" style="display: none;">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="filter-categories" id="filter-categories">
+                <button class="filter-chip active" data-category="all">All Updates</button>
+                <button class="filter-chip" data-category="Feature">Features</button>
+                <button class="filter-chip" data-category="Changed">Changed</button>
+                <button class="filter-chip" data-category="Deprecated">Deprecated</button>
+                <button class="filter-chip" data-category="Resolved">Resolved</button>
+            </div>
+        </section>
+
+        <!-- Main Feed Grid -->
+        <main class="feed-layout">
+            
+            <!-- Feed Container -->
+            <div class="feed-container">
+                <!-- Skeleton Loading State -->
+                <div id="feed-skeleton" class="skeleton-wrapper">
+                    <div class="skeleton-date-group">
+                        <div class="skeleton-date"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                    </div>
+                    <div class="skeleton-date-group">
+                        <div class="skeleton-date"></div>
+                        <div class="skeleton-card"></div>
+                    </div>
+                </div>
+
+                <!-- Actual Feed Content -->
+                <div id="feed-content" class="feed-content-list" style="display: none;">
+                    <!-- Dynamically populated -->
+                </div>
+
+                <!-- Empty State -->
+                <div id="feed-empty" class="empty-state glass" style="display: none;">
+                    <div class="empty-icon">
+                        <i class="fa-solid fa-filter-circle-xmark"></i>
+                    </div>
+                    <h3>No updates match your search</h3>
+                    <p>Try refining your keywords or clearing the category filters.</p>
+                    <button id="btn-clear-filters" class="btn btn-secondary">Clear Filters</button>
+                </div>
+            </div>
+
+            <!-- Stats/Instructions Panel (Right Sidebar) -->
+            <aside class="sidebar-panel">
+                <div class="card glass stats-card">
+                    <h3><i class="fa-solid fa-circle-info"></i> Quick Guide</h3>
+                    <div class="guide-steps">
+                        <div class="step">
+                            <span class="step-num">1</span>
+                            <div class="step-body">
+                                <h4>Browse Updates</h4>
+                                <p>Latest updates parsed directly from the Google Cloud BigQuery feed.</p>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <span class="step-num">2</span>
+                            <div class="step-body">
+                                <h4>Select and Craft</h4>
+                                <p>Click on any update card to select it, or click the Tweet button directly to compile a post.</p>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <span class="step-num">3</span>
+                            <div class="step-body">
+                                <h4>Broadcast</h4>
+                                <p>Edit your announcement text and publish it directly to Twitter / X.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card glass metrics-card">
+                    <h3><i class="fa-solid fa-chart-simple"></i> Feed Analytics</h3>
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <span class="metric-val" id="stat-total-updates">-</span>
+                            <span class="metric-lbl">Total Updates</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-val" id="stat-features-count">-</span>
+                            <span class="metric-lbl">Features</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-val" id="stat-days-covered">-</span>
+                            <span class="metric-lbl">Days Logged</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <!-- Floating Tweet Composer Bar (Shows when card selected) -->
+    <div id="floating-action-bar" class="floating-bar glass">
+        <div class="bar-info">
+            <span class="selected-badge"><i class="fa-solid fa-square-check"></i></span>
+            <span class="selected-text" id="selected-card-info">1 update selected</span>
+        </div>
+        <div class="bar-actions">
+            <button id="btn-cancel-selection" class="btn btn-ghost">Deselect</button>
+            <button id="btn-tweet-selected" class="btn btn-primary btn-tweet">
+                <i class="fa-brands fa-x-twitter"></i>
+                <span>Compose Tweet</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Tweet Editor Modal -->
+    <div id="tweet-modal" class="modal-overlay">
+        <div class="modal-content glass">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fa-brands fa-x-twitter title-icon"></i>
+                    <h2>Compile X/Twitter Post</h2>
+                </div>
+                <button class="modal-close" id="btn-close-modal">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="original-snippet">
+                    <span class="snippet-lbl">Reference Snippet:</span>
+                    <p id="modal-snippet-text"></p>
+                </div>
+                
+                <div class="composer-container">
+                    <label for="tweet-textarea" class="composer-lbl">Customize Tweet Content</label>
+                    <textarea id="tweet-textarea" rows="6" placeholder="What's happening?"></textarea>
+                    
+                    <div class="composer-meta">
+                        <div class="char-counter" id="char-counter">
+                            <span id="char-count">0</span>/280
+                        </div>
+                        <div class="hashtag-helper">
+                            <span class="helper-lbl">Add Tags:</span>
+                            <button class="tag-suggestion" data-tag="#BigQuery">#BigQuery</button>
+                            <button class="tag-suggestion" data-tag="#GCP">#GCP</button>
+                            <button class="tag-suggestion" data-tag="#DataEngineering">#DataEng</button>
+                            <button class="tag-suggestion" data-tag="#GoogleCloud">#GoogleCloud</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-modal-cancel" class="btn btn-secondary">Discard</button>
+                <button id="btn-modal-submit" class="btn btn-primary btn-tweet">
+                    <i class="fa-brands fa-x-twitter"></i>
+                    <span>Share on X</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Script for Main logic -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
