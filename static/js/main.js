@@ -15,7 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
         lastFetched: '',
         activePlatform: 'twitter', // Current active composer platform: twitter, linkedin, slack
         hasGeminiKey: false,     // Server has Gemini API key status
-        hasSlackUrl: false       // Server has Slack Webhook URL status
+        hasSlackUrl: false,      // Server has Slack Webhook URL status
+        drafts: {               // Stored drafts for each platform so they don't get lost on tab switch
+            twitter: '',
+            linkedin: '',
+            slack: ''
+        }
     };
 
     // --- DOM Elements ---
@@ -640,6 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
             if (data.post) {
+                appState.drafts[platform] = data.post;
                 elements.tweetTextarea.value = data.post;
                 updateCharCount();
                 showToast(`${platform.toUpperCase()} draft generated with ${tone} tone!`, 'success');
@@ -684,7 +690,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Reset submit button classes and inline styles
         elements.btnModalSubmit.className = 'btn btn-primary';
-        elements.btnModalSubmit.style.backgroundColor = '';
+        elements.btnModalSubmit.style.background = '';
         elements.btnModalSubmit.style.boxShadow = '';
         
         if (platform === 'twitter') {
@@ -697,9 +703,6 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.submitBtnIcon.className = 'fa-brands fa-x-twitter';
             elements.submitBtnText.textContent = 'Share on X';
             elements.btnModalSubmit.classList.add('btn-tweet');
-            
-            // Re-draft standard Twitter template
-            elements.tweetTextarea.value = generateInitialPostText('twitter', update.date, update.category, update.text);
         } 
         else if (platform === 'linkedin') {
             elements.modalTitleIcon.className = 'fa-brands fa-linkedin title-icon';
@@ -711,10 +714,8 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.submitBtnIcon.className = 'fa-solid fa-copy';
             elements.submitBtnText.textContent = 'Copy & Open LinkedIn';
             // Custom LinkedIn Styling
-            elements.btnModalSubmit.style.backgroundColor = '#0077b5';
+            elements.btnModalSubmit.style.background = '#0077b5';
             elements.btnModalSubmit.style.boxShadow = '0 4px 12px rgba(0, 119, 181, 0.25)';
-            
-            elements.tweetTextarea.value = generateInitialPostText('linkedin', update.date, update.category, update.text);
         }
         else if (platform === 'slack') {
             elements.modalTitleIcon.className = 'fa-brands fa-slack title-icon';
@@ -726,11 +727,15 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.submitBtnIcon.className = 'fa-solid fa-paper-plane';
             elements.submitBtnText.textContent = 'Post to Slack';
             // Custom Slack Styling
-            elements.btnModalSubmit.style.backgroundColor = '#4a154b';
+            elements.btnModalSubmit.style.background = '#4a154b';
             elements.btnModalSubmit.style.boxShadow = '0 4px 12px rgba(74, 21, 75, 0.25)';
-            
-            elements.tweetTextarea.value = generateInitialPostText('slack', update.date, update.category, update.text);
         }
+        
+        // Populate textarea from drafts cache, or initialize if empty
+        if (!appState.drafts[platform]) {
+            appState.drafts[platform] = generateInitialPostText(platform, update.date, update.category, update.text);
+        }
+        elements.tweetTextarea.value = appState.drafts[platform];
         
         updateCharCount();
     }
@@ -765,6 +770,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!appState.selectedUpdate) return;
         
         const { date, category, text } = appState.selectedUpdate;
+        
+        // Reset drafts for the new selection
+        appState.drafts = {
+            twitter: '',
+            linkedin: '',
+            slack: ''
+        };
         
         // Load original snippet for user reference
         elements.modalSnippetText.textContent = text;
@@ -902,7 +914,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Textarea typing character count listener
-    elements.tweetTextarea.addEventListener('input', updateCharCount);
+    elements.tweetTextarea.addEventListener('input', () => {
+        appState.drafts[appState.activePlatform] = elements.tweetTextarea.value;
+        updateCharCount();
+    });
 
     // Hashtag Suggesters
     elements.tagSuggestions.forEach(btn => {
@@ -921,6 +936,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 elements.tweetTextarea.value += ' ' + tag;
             }
             
+            appState.drafts[appState.activePlatform] = elements.tweetTextarea.value;
             updateCharCount();
             elements.tweetTextarea.focus();
         });

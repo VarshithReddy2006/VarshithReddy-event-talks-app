@@ -342,104 +342,17 @@ def generate_post():
             "error": "Gemini API key is missing. Please set it in the settings panel."
         }), 400
 
-    # Customize prompt depending on the target platform
-    if platform == 'linkedin':
-        platform_instructions = """
-Draft a professional, engaging LinkedIn update (maximum 2000 characters) announcing this release note.
-Instructions:
-1. Make it professional but engaging, well-suited for a LinkedIn audience of data engineers, architects, and IT decision-makers.
-2. Structure the post using bullet points, bold headers (using unicode bold like 𝗧𝗲𝗰𝗵 if appropriate, or plain text formatting), and emojis for readability.
-3. Explain the business/technical value of this update clearly.
-4. Include relevant professional hashtags at the end, such as #BigQuery #GoogleCloud #DataEngineering #CloudComputing.
-5. Output ONLY the raw post content. No introductory sentences, quotes wrapping the post, or closing notes.
-"""
-    elif platform == 'slack':
-        platform_instructions = """
-Draft an internal Slack team announcement announcing this release note.
-Instructions:
-1. Use Slack Markdown formatting: use asterisks for *bolding*, underscores for _italics_, and proper list items (e.g. • or -).
-2. Start with an announcement title (e.g., "*📢 BigQuery Update: [Date]*").
-3. Include sections: "*What is it?*", "*Key Details*", and "*Action Required / Impact*".
-4. Keep the tone helpful, clear, and informative for internal team developers and analysts.
-5. Output ONLY the raw post content. No introductory sentences, quotes wrapping the post, or closing notes.
-"""
-    else: # Default: twitter
-        platform_instructions = """
-Draft a short X/Twitter post (maximum 280 characters including hashtags) announcing this release note.
-Instructions:
-1. Ensure the final text is strictly under 280 characters (including hashtags).
-2. Include relevant hashtags like #BigQuery #GCP.
-3. Output ONLY the raw tweet text. No introductory sentences, quotes wrapping the post, or explanatory footnotes.
-"""
-
-    prompt = f"""You are a developer relations specialist and technical writer.
-We need to post about the following Google Cloud BigQuery release note:
-
-Release Note Date: {date}
-Category: {category}
-Content: {text}
-
-Requested Tone: {tone} (Apply this tone to your draft:
-- Professional: Clear, industry-standard language, focuses on business value.
-- Tech Enthusiast: Highlights technical specs, features, and how it helps developers.
-- Hype: Uses emojis, exclamation marks, and highlights major improvements.
-- ELI5: Extremely simple language, explains the core concept in layman terms.)
-
-Target Platform Instructions:
-{platform_instructions}
-"""
-
     try:
-        import requests as req_lib  # Import locally to prevent variable collision
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={api_key}"
-        headers = {'Content-Type': 'application/json'}
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }],
-            "generationConfig": {
-                "maxOutputTokens": 1024,
-                "temperature": 0.7
-            }
-        }
-        
-        response = req_lib.post(url, json=payload, headers=headers, timeout=15)
-        
-        if response.status_code != 200:
-            try:
-                response_data = response.json()
-                error_msg = response_data.get('error', {}).get('message', 'Unknown API Error')
-            except Exception:
-                error_msg = f"HTTP {response.status_code}: {response.text}"
-            return jsonify({"error": f"Gemini API Error: {error_msg}"}), response.status_code
-            
-        response_data = response.json()
-        
-        # Debugging logs
-        print("\n=== GEMINI REQUEST PROMPT ===")
-        print(prompt)
-        print("=== GEMINI RAW RESPONSE ===")
-        print(response_data)
-        
-        if 'candidates' not in response_data or not response_data['candidates']:
-            return jsonify({"error": "No generation candidate returned by Gemini API"}), 500
-            
-        post_text = response_data['candidates'][0]['content']['parts'][0]['text'].strip()
-        print("=== EXTRACTED POST TEXT ===")
-        print(post_text)
-        
-        # Strip quotes if AI returned it inside quotes
-        if post_text.startswith('"') and post_text.endswith('"'):
-            post_text = post_text[1:-1].strip()
-        elif post_text.startswith("'") and post_text.endswith("'"):
-            post_text = post_text[1:-1].strip()
-            
-        print("=== FINAL POST TEXT ===")
-        print(post_text)
-        print("=======================\n")
-            
+        from text_generator import generate_post_content
+        post_text = generate_post_content(
+            api_key=api_key,
+            text=text,
+            date=date,
+            category=category,
+            tone=tone,
+            platform=platform
+        )
         return jsonify({"post": post_text})
-        
     except Exception as e:
         return jsonify({"error": f"Failed to generate post: {str(e)}"}), 500
 
