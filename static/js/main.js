@@ -13,7 +13,9 @@ document.addEventListener('DOMContentLoaded', () => {
         activeTag: 'all',       // Current active tag/domain filter
         starredIds: new Set(),  // Set of starred update IDs
         lastFetched: '',
-        activePlatform: 'twitter' // Current active composer platform: twitter, linkedin, slack
+        activePlatform: 'twitter', // Current active composer platform: twitter, linkedin, slack
+        hasGeminiKey: false,     // Server has Gemini API key status
+        hasSlackUrl: false       // Server has Slack Webhook URL status
     };
 
     // --- DOM Elements ---
@@ -79,6 +81,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Tag Elements
         tagFiltersContainer: document.getElementById('tag-filters'),
         tagsBreakdownList: document.getElementById('tags-breakdown-list'),
+        
+        // Sync Status Elements
+        syncStatusContainer: document.getElementById('sync-status-container'),
+        syncStatusDot: document.getElementById('sync-status-dot'),
+        syncStatusText: document.getElementById('sync-status-text'),
         
         // Toasts
         toastContainer: document.getElementById('toast-container')
@@ -474,40 +481,119 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- API Key / Settings Modal Management ---
-    function openSettingsModal() {
-        elements.geminiKeyInput.value = localStorage.getItem('gemini_api_key') || '';
-        elements.slackUrlInput.value = localStorage.getItem('slack_webhook_url') || '';
+    async function openSettingsModal() {
+        elements.geminiKeyInput.value = '';
+        elements.slackUrlInput.value = '';
+        elements.geminiKeyInput.placeholder = 'Loading settings...';
+        elements.slackUrlInput.placeholder = 'Loading settings...';
+        
         elements.settingsModal.classList.add('active');
+        
+        try {
+            const response = await fetch('/api/settings');
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Server values
+                elements.geminiKeyInput.value = data.gemini_api_key || localStorage.getItem('gemini_api_key') || '';
+                elements.slackUrlInput.value = data.slack_webhook_url || localStorage.getItem('slack_webhook_url') || '';
+                
+                appState.hasGeminiKey = data.has_gemini_key;
+                appState.hasSlackUrl = data.has_slack_url;
+            } else {
+                elements.geminiKeyInput.value = localStorage.getItem('gemini_api_key') || '';
+                elements.slackUrlInput.value = localStorage.getItem('slack_webhook_url') || '';
+            }
+        } catch (error) {
+            console.error('Error fetching settings:', error);
+            elements.geminiKeyInput.value = localStorage.getItem('gemini_api_key') || '';
+            elements.slackUrlInput.value = localStorage.getItem('slack_webhook_url') || '';
+        } finally {
+            elements.geminiKeyInput.placeholder = 'Paste your API key here (AIzaSy...)';
+            elements.slackUrlInput.placeholder = 'Paste your Slack Webhook URL here (https://hooks.slack.com/...)';
+        }
     }
 
     function closeSettingsModal() {
         elements.settingsModal.classList.remove('active');
     }
 
-    function saveSettings() {
+    async function saveSettings() {
         const key = elements.geminiKeyInput.value.trim();
         const slackUrl = elements.slackUrlInput.value.trim();
         
-        if (key) {
+        // Save locally if they are new (unmasked) values
+        if (key && !key.includes('*')) {
             localStorage.setItem('gemini_api_key', key);
-        } else {
+        } else if (!key) {
             localStorage.removeItem('gemini_api_key');
         }
         
-        if (slackUrl) {
+        if (slackUrl && !slackUrl.includes('*')) {
             localStorage.setItem('slack_webhook_url', slackUrl);
-        } else {
+        } else if (!slackUrl) {
             localStorage.removeItem('slack_webhook_url');
         }
         
-        showToast('Settings saved successfully!', 'success');
-        closeSettingsModal();
+        // Save to Flask backend server config
+        try {
+            elements.btnSaveSettings.disabled = true;
+            elements.btnSaveSettings.textContent = 'Saving...';
+            
+            const response = await fetch('/api/settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    gemini_api_key: key,
+                    slack_webhook_url: slackUrl
+                })
+            });
+            
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'Server error saving settings');
+            }
+            
+            // Re-fetch credentials status
+            await updateClientCredentialsStatus();
+            
+            showToast('Settings saved securely on server!', 'success');
+            closeSettingsModal();
+        } catch (error) {
+            console.error('Error saving settings to server:', error);
+            showToast(`Error: ${error.message}`, 'error');
+        } finally {
+            elements.btnSaveSettings.disabled = false;
+            elements.btnSaveSettings.textContent = 'Save Settings';
+        }
+    }
+    
+    // Helper to fetch server credentials status
+    async function updateClientCredentialsStatus() {
+        try {
+            const response = await fetch('/api/settings');
+            if (response.ok) {
+                const data = await response.json();
+                appState.hasGeminiKey = data.has_gemini_key;
+                appState.hasSlackUrl = data.has_slack_url;
+            }
+        } catch (error) {
+            console.error('Error fetching credentials status:', error);
+        }
     }
 
     // --- AI Post Generation ---
     async function generateAiPost() {
-        const apiKey = localStorage.getItem('gemini_api_key');
-        if (!apiKey) {
+        let apiKey = localStorage.getItem('gemini_api_key') || '';
+        
+        // If it's a masked key, do not send it (let server use stored config key)
+        if (apiKey.includes('*')) {
+            apiKey = '';
+        }
+        
+        if (!apiKey && !appState.hasGeminiKey) {
             showToast('Please set your Gemini API key in settings first.', 'warning');
             openSettingsModal();
             return;
@@ -527,12 +613,17 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const tone = elements.aiToneSelect.value;
             const platform = appState.activePlatform;
+            
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+            if (apiKey) {
+                headers['X-Gemini-Key'] = apiKey;
+            }
+            
             const response = await fetch('/api/generate-post', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Gemini-Key': apiKey
-                },
+                headers: headers,
                 body: JSON.stringify({
                     text: appState.selectedUpdate.text,
                     date: appState.selectedUpdate.date,
@@ -874,8 +965,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } 
         else if (platform === 'slack') {
-            const webhookUrl = localStorage.getItem('slack_webhook_url');
-            if (!webhookUrl) {
+            let webhookUrl = localStorage.getItem('slack_webhook_url') || '';
+            if (webhookUrl.includes('*')) {
+                webhookUrl = '';
+            }
+            
+            if (!webhookUrl && !appState.hasSlackUrl) {
                 showToast('Please configure your Slack Webhook URL in Settings first.', 'warning');
                 closeTweetModal();
                 openSettingsModal();
@@ -890,15 +985,19 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.submitBtnText.textContent = 'Posting...';
             
             try {
+                const payload = {
+                    message: text
+                };
+                if (webhookUrl) {
+                    payload.webhook_url = webhookUrl;
+                }
+                
                 const response = await fetch('/api/send-slack', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        message: text,
-                        webhook_url: webhookUrl
-                    })
+                    body: JSON.stringify(payload)
                 });
                 
                 if (!response.ok) {
@@ -936,10 +1035,56 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Background Sync Worker Status ---
+    async function fetchSyncStatus() {
+        try {
+            const response = await fetch('/api/sync-status');
+            if (response.ok) {
+                const data = await response.json();
+                const status = data.status || 'Inactive';
+                const count = data.sync_count || 0;
+                const lastTime = data.last_sync_time || 'Never';
+                
+                // Update indicator text
+                elements.syncStatusText.textContent = `Auto-Sync: ${status}`;
+                elements.syncStatusContainer.setAttribute('title', `Background Auto-Sync Status\nStatus: ${status}\nPolls Done: ${count}\nLast Auto-Sync: ${lastTime}`);
+                
+                // Update dot style
+                elements.syncStatusDot.className = 'status-dot';
+                
+                if (status === 'Active') {
+                    elements.syncStatusDot.style.backgroundColor = 'var(--cat-feature)';
+                    elements.syncStatusDot.style.boxShadow = '0 0 8px var(--cat-feature)';
+                } else if (status.includes('Syncing')) {
+                    elements.syncStatusDot.style.backgroundColor = 'var(--cat-changed)';
+                    elements.syncStatusDot.style.boxShadow = '0 0 8px var(--cat-changed)';
+                } else if (status === 'Error') {
+                    elements.syncStatusDot.style.backgroundColor = 'var(--cat-deprecated)';
+                    elements.syncStatusDot.style.boxShadow = '0 0 8px var(--cat-deprecated)';
+                } else {
+                    elements.syncStatusDot.style.backgroundColor = 'var(--cat-general)';
+                    elements.syncStatusDot.style.boxShadow = '0 0 8px var(--cat-general)';
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching background sync status:', error);
+            elements.syncStatusText.textContent = 'Auto-Sync: Error';
+            elements.syncStatusDot.style.backgroundColor = 'var(--cat-deprecated)';
+            elements.syncStatusDot.style.boxShadow = '0 0 8px var(--cat-deprecated)';
+        }
+    }
+
     // --- App Init ---
     const savedStarred = localStorage.getItem('starred_updates_ids');
     if (savedStarred) {
         appState.starredIds = new Set(JSON.parse(savedStarred));
     }
+    
+    // Initial fetches
+    updateClientCredentialsStatus();
+    fetchSyncStatus();
     fetchReleaseNotes();
+    
+    // Set up status poll interval (every 30 seconds)
+    setInterval(fetchSyncStatus, 30000);
 });

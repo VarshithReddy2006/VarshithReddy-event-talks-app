@@ -118,3 +118,7 @@ share/
 *.njsproj
 *.sln
 *.sw?
+
+# User credentials
+config.json
+

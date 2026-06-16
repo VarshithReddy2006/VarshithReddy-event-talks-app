@@ -36,6 +36,10 @@
             </div>
             
             <div class="header-actions">
+                <div class="status-indicator" id="sync-status-container" title="Background Auto-Sync Status">
+                    <span class="status-dot" id="sync-status-dot" style="background-color: var(--cat-general); box-shadow: 0 0 8px var(--cat-general);"></span>
+                    <span id="sync-status-text">Auto-Sync: Checking...</span>
+                </div>
                 <div class="status-indicator">
                     <span class="status-dot"></span>
                     <span id="last-updated-time">Checking...</span>
@@ -71,7 +75,7 @@
             <div class="tag-filters" id="tag-filters" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; border-top: 1px solid var(--border-color); padding-top: 0.75rem; align-items: center;">
                 <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-right: 0.5rem;">Domain:</span>
                 <button class="filter-chip active" data-tag="all" style="padding: 0.35rem 0.85rem; font-size: 0.8rem;">All Domains</button>
-                <!-- Dynamically rendered domain buttons go here -->
+                <!-- Dynamically rendered domain domains breakdown -->
             </div>
         </section>
 
@@ -277,13 +281,13 @@
                 <div class="composer-container">
                     <label for="gemini-key-input" class="composer-lbl">Gemini API Key</label>
                     <input type="password" id="gemini-key-input" placeholder="Paste your API key here (AIzaSy...)" style="width: 100%; background: rgba(3, 7, 18, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem; color: var(--text-primary); font-family: inherit; font-size: 0.95rem; margin-bottom: 0.5rem; transition: var(--transition-normal);">
-                    <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">This key is saved locally in your browser's <code>localStorage</code> and never sent to our servers except to call the Google Gemini API endpoint.</p>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">This key is saved securely on the server and in your browser's <code>localStorage</code>. It is used to generate release summaries using the Gemini API.</p>
                 </div>
                 
                 <div class="composer-container" style="border-top: 1px solid var(--border-color); padding-top: 1.25rem;">
                     <label for="slack-url-input" class="composer-lbl">Slack Incoming Webhook URL (Optional)</label>
                     <input type="password" id="slack-url-input" placeholder="Paste your Slack Webhook URL here (https://hooks.slack.com/...)" style="width: 100%; background: rgba(3, 7, 18, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem; color: var(--text-primary); font-family: inherit; font-size: 0.95rem; margin-bottom: 0.5rem; transition: var(--transition-normal);">
-                    <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">Configure this if you want to broadcast release notes directly to an internal Slack channel.</p>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">Saved securely on the server and in <code>localStorage</code>. Required for the background cron sync to automatically post new updates to your Slack channel.</p>
                 </div>
             </div>
             <div class="modal-footer">

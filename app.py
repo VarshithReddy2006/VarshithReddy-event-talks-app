@@ -4,8 +4,39 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from flask import Flask, jsonify, render_template, request
+import json
+import threading
+import time
 
 app = Flask(__name__)
+
+CONFIG_FILE = "config.json"
+
+# Global state for background worker
+known_entry_ids = set()
+background_status = {
+    "last_sync_time": "Never",
+    "sync_count": 0,
+    "status": "Inactive"
+}
+
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_config(config_data):
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config_data, f, indent=4)
+        return True
+    except Exception:
+        return False
+
 
 # Simple in-memory cache to prevent overloading Google's feeds
 cache = {
@@ -114,6 +145,125 @@ def parse_feed_xml(xml_data):
             
     return release_notes_by_date
 
+def background_sync_worker():
+    global known_entry_ids
+    print("[Background Sync] Worker thread started.")
+    background_status["status"] = "Active"
+    
+    # Wait a bit on start to let the app initialize and make the first load
+    time.sleep(5)
+    
+    # First-time load to populate known IDs (so we don't alert on boot)
+    try:
+        req = urllib.request.Request(
+            FEED_URL, 
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AntigravityFeedReader/1.0'}
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            xml_data = response.read()
+        root = ET.fromstring(xml_data)
+        ns = {'ns': 'http://www.w3.org/2005/Atom'}
+        entries = root.findall('ns:entry', ns)
+        for entry in entries:
+            entry_id_el = entry.find('ns:id', ns)
+            if entry_id_el is not None:
+                known_entry_ids.add(entry_id_el.text)
+        print(f"[Background Sync] Initialized. Loaded {len(known_entry_ids)} known entries.")
+    except Exception as e:
+        print("[Background Sync] Initialization error:", str(e))
+        
+    while True:
+        # Loop every 10 minutes (600 seconds)
+        time.sleep(600)
+        
+        try:
+            background_status["status"] = "Syncing..."
+            req = urllib.request.Request(
+                FEED_URL, 
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AntigravityFeedReader/1.0'}
+            )
+            with urllib.request.urlopen(req, timeout=10) as response:
+                xml_data = response.read()
+                
+            root = ET.fromstring(xml_data)
+            ns = {'ns': 'http://www.w3.org/2005/Atom'}
+            entries = root.findall('ns:entry', ns)
+            
+            new_entries = []
+            for entry in entries:
+                entry_id_el = entry.find('ns:id', ns)
+                if entry_id_el is not None:
+                    entry_id = entry_id_el.text
+                    if entry_id not in known_entry_ids:
+                        new_entries.append(entry)
+                    
+            if new_entries:
+                print(f"[Background Sync] Found {len(new_entries)} new release note entries!")
+                config = load_config()
+                slack_webhook = config.get('slack_webhook_url') or os.environ.get('SLACK_WEBHOOK_URL')
+                
+                # Process oldest first
+                for entry in reversed(new_entries):
+                    title_el = entry.find('ns:title', ns)
+                    title = title_el.text if title_el is not None else "New Update"
+                    content_html = entry.find('ns:content', ns).text or ""
+                    
+                    # Parse updates
+                    updates = []
+                    parts = re.split(r'(?i)<\s*h3\s*>', content_html)
+                    first_part = parts[0].strip()
+                    if first_part:
+                        text = clean_html_for_text(first_part)
+                        if text:
+                            updates.append({"category": "General", "text": text})
+                            
+                    for idx, part in enumerate(parts[1:]):
+                        sub_parts = re.split(r'(?i)<\s*/\s*h3\s*>', part, maxsplit=1)
+                        if len(sub_parts) == 2:
+                            category = sub_parts[0].strip()
+                            body = sub_parts[1].strip()
+                        else:
+                            category = "Update"
+                            body = part.strip()
+                        text = clean_html_for_text(body)
+                        if text:
+                            updates.append({"category": category, "text": text})
+                            
+                    # Post updates to Slack webhook
+                    if slack_webhook and updates:
+                        for u in updates:
+                            slack_message = f"*📢 New BigQuery Update Alert ({title})* \n" \
+                                            f"• *Category*: _{u['category']}_\n" \
+                                            f"• *Update*: {u['text']}\n" \
+                                            f"• *Broadcast*: _Automated from Antigravity Release Companion_"
+                            
+                            try:
+                                import requests as req_lib
+                                req_lib.post(slack_webhook, json={"text": slack_message}, headers={'Content-Type': 'application/json'}, timeout=10)
+                                print(f"[Background Sync] Auto-posted to Slack: {u['category']}")
+                            except Exception as slack_err:
+                                print(f"[Background Sync] Auto-Slack post error: {str(slack_err)}")
+                                
+                    entry_id_el = entry.find('ns:id', ns)
+                    if entry_id_el is not None:
+                        known_entry_ids.add(entry_id_el.text)
+                
+                # Update global cache
+                parsed_data = parse_feed_xml(xml_data)
+                cache["data"] = parsed_data
+                cache["last_fetched"] = datetime.now().strftime("%I:%M:%S %p")
+                
+            background_status["sync_count"] += 1
+            background_status["last_sync_time"] = datetime.now().strftime("%I:%M:%S %p")
+            background_status["status"] = "Active"
+            
+        except Exception as e:
+            print("[Background Sync] Error during poll loop:", str(e))
+            background_status["status"] = "Error"
+
+# Start background sync worker daemon thread
+threading.Thread(target=background_sync_worker, daemon=True).start()
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -158,8 +308,9 @@ def generate_post():
     tone = data.get('tone', 'Tech Enthusiast')
     platform = data.get('platform', 'twitter').lower()
     
-    # Check for API key in header first, then in environment
-    api_key = request.headers.get('X-Gemini-Key') or os.environ.get('GEMINI_API_KEY')
+    # Check for API key in header first, then in config, then in environment
+    config = load_config()
+    api_key = request.headers.get('X-Gemini-Key') or config.get('gemini_api_key') or os.environ.get('GEMINI_API_KEY')
     
     if not api_key:
         return jsonify({
@@ -271,7 +422,9 @@ Target Platform Instructions:
 def send_slack():
     data = request.get_json() or {}
     message = data.get('message', '')
-    webhook_url = data.get('webhook_url') or os.environ.get('SLACK_WEBHOOK_URL')
+    
+    config = load_config()
+    webhook_url = data.get('webhook_url') or config.get('slack_webhook_url') or os.environ.get('SLACK_WEBHOOK_URL')
     
     if not webhook_url:
         return jsonify({"error": "Slack Webhook URL is missing. Please configure it in Settings."}), 400
@@ -293,6 +446,58 @@ def send_slack():
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": f"Failed to send to Slack: {str(e)}"}), 500
+
+@app.route('/api/settings', methods=['GET', 'POST'])
+def handle_settings():
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        gemini_key = data.get('gemini_api_key', '').strip()
+        slack_url = data.get('slack_webhook_url', '').strip()
+        
+        config = load_config()
+        if gemini_key and '*' not in gemini_key:
+            config['gemini_api_key'] = gemini_key
+        elif not gemini_key:
+            config['gemini_api_key'] = ''
+            
+        if slack_url and '*' not in slack_url:
+            config['slack_webhook_url'] = slack_url
+        elif not slack_url:
+            config['slack_webhook_url'] = ''
+            
+        if save_config(config):
+            return jsonify({"success": True})
+        return jsonify({"error": "Failed to save settings on server."}), 500
+    else:
+        config = load_config()
+        
+        # Mask the keys for safety
+        masked_gemini = ""
+        gemini_key = config.get('gemini_api_key', '')
+        if gemini_key:
+            masked_gemini = gemini_key[:8] + "*" * (len(gemini_key) - 8)
+            
+        masked_slack = ""
+        slack_url = config.get('slack_webhook_url', '')
+        if slack_url:
+            masked_slack = slack_url[:15] + "*" * (len(slack_url) - 15)
+            
+        return jsonify({
+            "gemini_api_key": masked_gemini,
+            "slack_webhook_url": masked_slack,
+            "has_gemini_key": bool(gemini_key),
+            "has_slack_url": bool(slack_url)
+        })
+
+@app.route('/api/sync-status')
+def get_sync_status():
+    return jsonify({
+        "last_sync_time": background_status["last_sync_time"],
+        "sync_count": background_status["sync_count"],
+        "status": background_status["status"],
+        "known_count": len(known_entry_ids)
+    })
+
 
 
 if __name__ == '__main__':
