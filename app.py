@@ -332,6 +332,9 @@ def generate_post():
     category = data.get('category', '')
     tone = data.get('tone', 'Tech Enthusiast')
     platform = data.get('platform', 'twitter').lower()
+    audience = data.get('audience', 'Developers')
+    length = data.get('length', 'Standard')
+    keywords = data.get('keywords', '')
     
     # Check for API key in header first, then in config, then in environment
     config = load_config()
@@ -350,7 +353,10 @@ def generate_post():
             date=date,
             category=category,
             tone=tone,
-            platform=platform
+            platform=platform,
+            audience=audience,
+            length=length,
+            keywords=keywords
         )
         return jsonify({"post": post_text})
     except Exception as e:

@@ -26,13 +26,36 @@ def safe_print(*args, **kwargs):
 # Override built-in print in this module
 print = safe_print
 
-def generate_post_content(api_key, text, date, category, tone, platform):
+def generate_post_content(api_key, text, date, category, tone, platform, audience='Developers', length='Standard', keywords=''):
     """
     Constructs the prompt, calls the Google Gemini API, and processes the response.
     Returns the generated post text.
     Raises Exception on failure.
     """
     platform = platform.lower()
+    
+    # Customize instructions based on Target Audience
+    audience_instructions = ""
+    if audience == 'Developers':
+        audience_instructions = "The target audience is Developers and Data Engineers. Focus on technical features, syntax, performance details, and developer tooling impact."
+    elif audience == 'Executives':
+        audience_instructions = "The target audience is Technical Executives and Managers. Focus on cost-efficiency, scalability, security compliance, business value, and ROI."
+    elif audience == 'General Public':
+        audience_instructions = "The target audience is the General Technical Public. Keep it clear, accessible, and explain the practical usefulness of the feature."
+        
+    # Customize instructions based on Post Length
+    length_instructions = ""
+    if length == 'Short':
+        length_instructions = "Make the draft very short, punchy, and direct to the point. Strip out unnecessary explanations."
+    elif length == 'Detailed':
+        length_instructions = "Provide a detailed explanation of the update, including background context, features, and detailed steps/points if appropriate."
+    elif length == 'Standard':
+        length_instructions = "Create a standard, well-balanced post summarizing the main highlights of the update."
+        
+    # Customize instructions based on Custom Keywords
+    keywords_instructions = ""
+    if keywords:
+        keywords_instructions = f"Naturally integrate and highlight the following custom keywords or phrases in the draft: {keywords}."
     
     # Customize prompt depending on the target platform
     if platform == 'linkedin':
@@ -76,6 +99,14 @@ Requested Tone: {tone} (Apply this tone to your draft:
 - Tech Enthusiast: Highlights technical specs, features, and how it helps developers.
 - Hype: Uses emojis, exclamation marks, and highlights major improvements.
 - ELI5: Extremely simple language, explains the core concept in layman terms.)
+
+Target Audience Guidance:
+{audience_instructions}
+
+Length Guidance:
+{length_instructions}
+
+{keywords_instructions}
 
 Target Platform Instructions:
 {platform_instructions}

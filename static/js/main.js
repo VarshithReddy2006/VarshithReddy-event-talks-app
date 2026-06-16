@@ -71,6 +71,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // AI Generator
         aiToneSelect: document.getElementById('ai-tone-select'),
+        aiAudienceSelect: document.getElementById('ai-audience-select'),
+        aiLengthSelect: document.getElementById('ai-length-select'),
+        aiKeywordsInput: document.getElementById('ai-keywords-input'),
         btnGenerateAi: document.getElementById('btn-generate-ai'),
         btnGenerateAiText: document.getElementById('btn-generate-ai-text'),
         aiSpinner: document.getElementById('ai-spinner'),
@@ -617,6 +620,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const tone = elements.aiToneSelect.value;
+            const audience = elements.aiAudienceSelect.value;
+            const length = elements.aiLengthSelect.value;
+            const keywords = elements.aiKeywordsInput.value.trim();
             const platform = appState.activePlatform;
             
             const headers = {
@@ -634,7 +640,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     date: appState.selectedUpdate.date,
                     category: appState.selectedUpdate.category,
                     tone: tone,
-                    platform: platform
+                    platform: platform,
+                    audience: audience,
+                    length: length,
+                    keywords: keywords
                 })
             });
 
@@ -777,6 +786,20 @@ document.addEventListener('DOMContentLoaded', () => {
             linkedin: '',
             slack: ''
         };
+        
+        // Clear keywords and reset dropdowns
+        if (elements.aiKeywordsInput) {
+            elements.aiKeywordsInput.value = '';
+        }
+        if (elements.aiToneSelect) {
+            elements.aiToneSelect.selectedIndex = 0;
+        }
+        if (elements.aiAudienceSelect) {
+            elements.aiAudienceSelect.selectedIndex = 0;
+        }
+        if (elements.aiLengthSelect) {
+            elements.aiLengthSelect.selectedIndex = 0;
+        }
         
         // Load original snippet for user reference
         elements.modalSnippetText.textContent = text;

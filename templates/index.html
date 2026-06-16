@@ -238,17 +238,44 @@
                 </div>
                 
                 <div class="ai-generator-panel" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-                    <span class="snippet-lbl" style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span class="snippet-lbl" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
                         <i class="fa-solid fa-wand-magic-sparkles" style="color: var(--accent-cyan);"></i> Gemini AI Assistant
                     </span>
+                    
+                    <div class="ai-controls-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+                        <div class="control-group">
+                            <label for="ai-tone-select" style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; display: block; margin-bottom: 0.25rem;">Tone</label>
+                            <select id="ai-tone-select" style="width: 100%; background: rgba(3, 7, 18, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.6rem; color: var(--text-primary); font-family: inherit; font-size: 0.9rem;">
+                                <option value="Tech Enthusiast">Tech Enthusiast (Default)</option>
+                                <option value="Professional">Professional</option>
+                                <option value="Hype">Hype / Exciting</option>
+                                <option value="ELI5">ELI5 (Explain Like I'm 5)</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label for="ai-audience-select" style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; display: block; margin-bottom: 0.25rem;">Target Audience</label>
+                            <select id="ai-audience-select" style="width: 100%; background: rgba(3, 7, 18, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.6rem; color: var(--text-primary); font-family: inherit; font-size: 0.9rem;">
+                                <option value="Developers">Developers & Engineers</option>
+                                <option value="Executives">Executives & Managers</option>
+                                <option value="General Public">General Technical Public</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label for="ai-length-select" style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; display: block; margin-bottom: 0.25rem;">Length</label>
+                            <select id="ai-length-select" style="width: 100%; background: rgba(3, 7, 18, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.6rem; color: var(--text-primary); font-family: inherit; font-size: 0.9rem;">
+                                <option value="Standard">Standard / Balanced</option>
+                                <option value="Short">Short & Punchy</option>
+                                <option value="Detailed">Detailed & Long</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label for="ai-keywords-input" style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; display: block; margin-bottom: 0.25rem;">Keywords (comma separated)</label>
+                            <input type="text" id="ai-keywords-input" placeholder="e.g. cost, performance" style="width: 100%; background: rgba(3, 7, 18, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.55rem 0.6rem; color: var(--text-primary); font-family: inherit; font-size: 0.9rem; box-sizing: border-box; transition: var(--transition-normal);">
+                        </div>
+                    </div>
+                    
                     <div style="display: flex; gap: 0.75rem; margin-top: 0.5rem; align-items: center;">
-                        <select id="ai-tone-select" style="background: rgba(3, 7, 18, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.6rem; color: var(--text-primary); font-family: inherit; font-size: 0.9rem; flex-grow: 1;">
-                            <option value="Tech Enthusiast">Tech Enthusiast (Default)</option>
-                            <option value="Professional">Professional</option>
-                            <option value="Hype">Hype / Exciting</option>
-                            <option value="ELI5">ELI5 (Explain Like I'm 5)</option>
-                        </select>
-                        <button id="btn-generate-ai" class="btn btn-primary" style="padding: 0.6rem 1rem; font-size: 0.9rem;">
+                        <button id="btn-generate-ai" class="btn btn-primary" style="padding: 0.6rem 1rem; font-size: 0.9rem; flex-grow: 1;">
                             <i class="fa-solid fa-spinner fa-spin" id="ai-spinner" style="display: none; margin-right: 0.25rem;"></i>
                             <span id="btn-generate-ai-text">Draft Post</span>
                         </button>
