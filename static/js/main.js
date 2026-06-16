@@ -50,6 +50,18 @@ document.addEventListener('DOMContentLoaded', () => {
         btnModalSubmit: document.getElementById('btn-modal-submit'),
         tagSuggestions: document.querySelectorAll('.tag-suggestion'),
         
+        // Settings Modal
+        btnSettings: document.getElementById('btn-settings'),
+        settingsModal: document.getElementById('settings-modal'),
+        btnCloseSettings: document.getElementById('btn-close-settings'),
+        geminiKeyInput: document.getElementById('gemini-key-input'),
+        btnSaveSettings: document.getElementById('btn-save-settings'),
+        
+        // AI Generator
+        aiToneSelect: document.getElementById('ai-tone-select'),
+        btnGenerateAi: document.getElementById('btn-generate-ai'),
+        aiSpinner: document.getElementById('ai-spinner'),
+        
         // Toasts
         toastContainer: document.getElementById('toast-container')
     };
@@ -317,6 +329,89 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- API Key / Settings Modal Management ---
+    function openSettingsModal() {
+        const key = localStorage.getItem('gemini_api_key') || '';
+        elements.geminiKeyInput.value = key;
+        elements.settingsModal.classList.add('active');
+    }
+
+    function closeSettingsModal() {
+        elements.settingsModal.classList.remove('active');
+    }
+
+    function saveSettings() {
+        const key = elements.geminiKeyInput.value.trim();
+        if (key) {
+            localStorage.setItem('gemini_api_key', key);
+            showToast('Gemini API key saved successfully!', 'success');
+        } else {
+            localStorage.removeItem('gemini_api_key');
+            showToast('Gemini API key cleared.', 'warning');
+        }
+        closeSettingsModal();
+    }
+
+    // --- AI Tweet Generation ---
+    async function generateAiTweet() {
+        const apiKey = localStorage.getItem('gemini_api_key');
+        if (!apiKey) {
+            showToast('Please set your Gemini API key in settings first.', 'warning');
+            openSettingsModal();
+            return;
+        }
+
+        if (!appState.selectedUpdate) {
+            showToast('No update selected to draft.', 'error');
+            return;
+        }
+
+        // Set Loading State
+        elements.btnGenerateAi.disabled = true;
+        elements.aiSpinner.style.display = 'inline-block';
+        const originalBtnText = elements.btnGenerateAi.querySelector('span').textContent;
+        elements.btnGenerateAi.querySelector('span').textContent = 'Drafting...';
+
+        try {
+            const tone = elements.aiToneSelect.value;
+            const response = await fetch('/api/generate-tweet', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Gemini-Key': apiKey
+                },
+                body: JSON.stringify({
+                    text: appState.selectedUpdate.text,
+                    date: appState.selectedUpdate.date,
+                    category: appState.selectedUpdate.category,
+                    tone: tone
+                })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || `Server returned ${response.status}`);
+            }
+
+            const data = await response.json();
+            if (data.tweet) {
+                elements.tweetTextarea.value = data.tweet;
+                updateCharCount();
+                showToast(`Tweet generated with ${tone} tone!`, 'success');
+            } else {
+                throw new Error('No tweet returned by generator.');
+            }
+
+        } catch (error) {
+            console.error('AI Tweet generation error:', error);
+            showToast(error.message, 'error');
+        } finally {
+            elements.btnGenerateAi.disabled = false;
+            elements.aiSpinner.style.display = 'none';
+            elements.btnGenerateAi.querySelector('span').textContent = originalBtnText;
+        }
+    }
+
     // --- Tweet Composers & Modal ---
     function generateInitialTweetText(date, category, text) {
         const header = `🚀 BigQuery Update [${date}] • #${category}\n\n`;
@@ -432,6 +527,19 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.btnCloseModal.addEventListener('click', closeTweetModal);
     elements.btnModalCancel.addEventListener('click', closeTweetModal);
 
+    // Settings Modal Events
+    elements.btnSettings.addEventListener('click', openSettingsModal);
+    elements.btnCloseSettings.addEventListener('click', closeSettingsModal);
+    elements.btnSaveSettings.addEventListener('click', saveSettings);
+    elements.settingsModal.addEventListener('click', (e) => {
+        if (e.target === elements.settingsModal) {
+            closeSettingsModal();
+        }
+    });
+
+    // AI Tweet Generation Event
+    elements.btnGenerateAi.addEventListener('click', generateAiTweet);
+
     // Textarea typing character count listener
     elements.tweetTextarea.addEventListener('input', updateCharCount);
 
@@ -493,6 +601,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             closeTweetModal();
+            closeSettingsModal();
             deselectUpdate();
         }
     });

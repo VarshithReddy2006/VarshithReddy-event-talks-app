@@ -44,6 +44,9 @@
                     <i class="fa-solid fa-arrows-rotate" id="refresh-icon"></i>
                     <span>Refresh</span>
                 </button>
+                <button id="btn-settings" class="btn btn-secondary" title="API Key Settings">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
             </div>
         </header>
 
@@ -199,6 +202,24 @@
                         </div>
                     </div>
                 </div>
+                
+                <div class="ai-generator-panel" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                    <span class="snippet-lbl" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <i class="fa-solid fa-wand-magic-sparkles" style="color: var(--accent-cyan);"></i> Gemini AI Assistant
+                    </span>
+                    <div style="display: flex; gap: 0.75rem; margin-top: 0.5rem; align-items: center;">
+                        <select id="ai-tone-select" style="background: rgba(3, 7, 18, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.6rem; color: var(--text-primary); font-family: inherit; font-size: 0.9rem; flex-grow: 1;">
+                            <option value="Tech Enthusiast">Tech Enthusiast (Default)</option>
+                            <option value="Professional">Professional</option>
+                            <option value="Hype">Hype / Exciting</option>
+                            <option value="ELI5">ELI5 (Explain Like I'm 5)</option>
+                        </select>
+                        <button id="btn-generate-ai" class="btn btn-primary" style="padding: 0.6rem 1rem; font-size: 0.9rem;">
+                            <i class="fa-solid fa-spinner fa-spin" id="ai-spinner" style="display: none; margin-right: 0.25rem;"></i>
+                            <span>Draft Tweet</span>
+                        </button>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button id="btn-modal-cancel" class="btn btn-secondary">Discard</button>
@@ -206,6 +227,31 @@
                     <i class="fa-brands fa-x-twitter"></i>
                     <span>Share on X</span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay">
+        <div class="modal-content glass">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fa-solid fa-gear title-icon"></i>
+                    <h2>API Settings</h2>
+                </div>
+                <button class="modal-close" id="btn-close-settings">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="composer-container">
+                    <label for="gemini-key-input" class="composer-lbl">Gemini API Key</label>
+                    <input type="password" id="gemini-key-input" placeholder="Paste your API key here (AIzaSy...)" style="width: 100%; background: rgba(3, 7, 18, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem; color: var(--text-primary); font-family: inherit; font-size: 0.95rem; margin-bottom: 0.5rem; transition: var(--transition-normal);">
+                    <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">This key is saved locally in your browser's <code>localStorage</code> and never sent to our servers except to call the Google Gemini API endpoint.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-save-settings" class="btn btn-primary">Save Key</button>
             </div>
         </div>
     </div>
